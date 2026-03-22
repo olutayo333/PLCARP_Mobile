@@ -1,0 +1,8 @@
+/* Basic reset for the native-web preview */
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background-color: #f3f4f6;
+}
