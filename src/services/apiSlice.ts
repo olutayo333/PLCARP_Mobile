@@ -1,7 +1,7 @@
-import {BaseQueryFn, FetchArgs, createApi, fetchBaseQuery, FetchBaseQueryError} from '@reduxjs/toolkit/query/react';
+import { BaseQueryFn, FetchArgs, createApi, fetchBaseQuery, FetchBaseQueryError } from '@reduxjs/toolkit/query/react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const BASE_URL = 'https://pluralcode-api.onrender.com/api/v1';
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://pluralcode-api.onrender.com/api/v1';
 
 const baseQueryWithAuth = fetchBaseQuery({
   baseUrl: BASE_URL,

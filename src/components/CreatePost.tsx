@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, { useState } from 'react';
 import {
   StyleSheet,
   View,
@@ -10,18 +10,19 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Platform,
 } from 'react-native';
-import {Camera, X, Image as ImageIcon, ChevronDown} from 'lucide-react-native';
+import { Camera, X, Image as ImageIcon, ChevronDown } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
-import {uploadFile} from '../services/axiosClient';
-import {useGetCommunitiesQuery, useCreateCommunityTopicMutation, CommunitySearchResult} from '../services/communityApi';
+import { uploadFile } from '../services/axiosClient';
+import { useGetCommunitiesQuery, useCreateCommunityTopicMutation, CommunitySearchResult } from '../services/communityApi';
 
 interface CreatePostProps {
   onCancel: () => void;
   onSuccess: () => void;
 }
 
-export function CreatePost({onCancel, onSuccess}: CreatePostProps) {
+export function CreatePost({ onCancel, onSuccess }: CreatePostProps) {
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [image, setImage] = useState<string | null>(null);
@@ -29,7 +30,7 @@ export function CreatePost({onCancel, onSuccess}: CreatePostProps) {
   const [showCommunityPicker, setShowCommunityPicker] = useState(false);
   const [uploading, setUploading] = useState(false);
 
-  const {data: communitiesData, isLoading: loadingCommunities} = useGetCommunitiesQuery({});
+  const { data: communitiesData, isLoading: loadingCommunities } = useGetCommunitiesQuery({});
   const [createTopic] = useCreateCommunityTopicMutation();
 
   const pickImage = async () => {
@@ -64,12 +65,12 @@ export function CreatePost({onCancel, onSuccess}: CreatePostProps) {
           name: 'photo.jpg',
           type: 'image/jpeg',
         };
-        
+
         const uploadResponse = await uploadFile(file);
         // Assuming uploadFile returns the URL in its response
         // For now, we'll just proceed as the API might handle it differently
       }
-      
+
       await createTopic({
         communityId: selectedCommunity.id,
         data: {
@@ -95,25 +96,25 @@ export function CreatePost({onCancel, onSuccess}: CreatePostProps) {
             <X size={24} color="#374151" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Select Community</Text>
-          <View style={{width: 24}} />
+          <View style={{ width: 24 }} />
         </View>
         <FlatList
           data={communitiesData?.communities || []}
           keyExtractor={(item) => item.id}
-          renderItem={({item}) => (
-            <TouchableOpacity 
+          renderItem={({ item }) => (
+            <TouchableOpacity
               style={styles.communityOption}
               onPress={() => {
                 setSelectedCommunity(item);
                 setShowCommunityPicker(false);
               }}
             >
-              <Image source={{uri: item.imageUrl || `https://picsum.photos/seed/${item.id}/100/100`}} style={styles.communityThumb} />
+              <Image source={{ uri: item.imageUrl || `https://picsum.photos/seed/${item.id}/100/100` }} style={styles.communityThumb} />
               <Text style={styles.communityOptionText}>{item.name}</Text>
             </TouchableOpacity>
           )}
           ListEmptyComponent={
-            loadingCommunities ? <ActivityIndicator style={{marginTop: 20}} /> : <Text style={styles.emptyText}>No communities found</Text>
+            loadingCommunities ? <ActivityIndicator style={{ marginTop: 20 }} /> : <Text style={styles.emptyText}>No communities found</Text>
           }
         />
       </View>
@@ -127,8 +128,8 @@ export function CreatePost({onCancel, onSuccess}: CreatePostProps) {
           <X size={24} color="#374151" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>New Topic</Text>
-        <TouchableOpacity 
-          onPress={handlePost} 
+        <TouchableOpacity
+          onPress={handlePost}
           disabled={uploading || !title || !body || !selectedCommunity}
           style={[styles.postButton, (!title || !body || !selectedCommunity || uploading) && styles.postButtonDisabled]}
         >
@@ -141,11 +142,11 @@ export function CreatePost({onCancel, onSuccess}: CreatePostProps) {
       </View>
 
       <ScrollView style={styles.content}>
-        <TouchableOpacity 
-          style={styles.communitySelector} 
+        <TouchableOpacity
+          style={styles.communitySelector}
           onPress={() => setShowCommunityPicker(true)}
         >
-          <Text style={[styles.communitySelectorText, !selectedCommunity && {color: '#9ca3af'}]}>
+          <Text style={[styles.communitySelectorText, !selectedCommunity && { color: '#9ca3af' }]}>
             {selectedCommunity ? `Posting to: ${selectedCommunity.name}` : 'Select a community'}
           </Text>
           <ChevronDown size={20} color="#6b7280" />
@@ -171,9 +172,9 @@ export function CreatePost({onCancel, onSuccess}: CreatePostProps) {
 
         {image ? (
           <View style={styles.imagePreviewContainer}>
-            <Image source={{uri: image}} style={styles.imagePreview} />
-            <TouchableOpacity 
-              style={styles.removeImage} 
+            <Image source={{ uri: image }} style={styles.imagePreview} />
+            <TouchableOpacity
+              style={styles.removeImage}
               onPress={() => setImage(null)}
             >
               <X size={20} color="#fff" />
@@ -190,7 +191,7 @@ export function CreatePost({onCancel, onSuccess}: CreatePostProps) {
 
         <View style={styles.options}>
           <TouchableOpacity style={styles.optionItem} onPress={pickImage}>
-            <ImageIcon size={24} color="#4f46e5" />
+            <ImageIcon size={24} color="#0e7490" />
             <Text style={styles.optionText}>Photo Library</Text>
           </TouchableOpacity>
         </View>
@@ -219,7 +220,7 @@ const styles = StyleSheet.create({
     color: '#111827',
   },
   postButton: {
-    backgroundColor: '#4f46e5',
+    backgroundColor: '#0e7490',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 8,
@@ -227,7 +228,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   postButtonDisabled: {
-    backgroundColor: '#a5b4fc',
+    backgroundColor: '#a5f3fc',
   },
   postButtonText: {
     color: '#fff',
@@ -259,12 +260,22 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#111827',
     paddingVertical: 8,
+    ...Platform.select({
+      web: {
+        outlineStyle: 'none',
+      },
+    }),
   },
   bodyInput: {
     fontSize: 16,
     color: '#374151',
     minHeight: 120,
     textAlignVertical: 'top',
+    ...Platform.select({
+      web: {
+        outlineStyle: 'none',
+      },
+    }),
   },
   imagePlaceholder: {
     width: '100%',

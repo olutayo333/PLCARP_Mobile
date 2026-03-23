@@ -1,13 +1,13 @@
 {
   "expo": {
-    "name": "Community Connect",
-    "slug": "community-connect",
+    "name": "PLCARP",
+    "slug": "plcarp",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/logo1.png",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/splash.png",
+      "image": "./assets/splash-screen.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
@@ -19,12 +19,19 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/logo1.png",
         "backgroundColor": "#ffffff"
-      }
+      },
+      "package": "com.stephent333.plcarp"
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "owner": "stephent333",
+    "extra": {
+      "eas": {
+        "projectId": "2bdeaa00-aae7-4e1d-9591-c597e7e2e502"
+      }
     }
   }
 }

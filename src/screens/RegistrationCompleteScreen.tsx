@@ -1,17 +1,17 @@
 import React from 'react';
-import {StyleSheet, View, Text, TouchableOpacity} from 'react-native';
-import {CheckCircle2} from 'lucide-react-native';
+import { StyleSheet, View, Text, TouchableOpacity } from 'react-native';
+import { CheckCircle2 } from 'lucide-react-native';
 
-export function RegistrationCompleteScreen({onGoHome}: {onGoHome: () => void}) {
+export function RegistrationCompleteScreen({ onGoHome }: { onGoHome: () => void }) {
   return (
     <View style={styles.container}>
       <View style={styles.content}>
         <View style={styles.iconContainer}>
           <CheckCircle2 size={80} color="#0e7490" />
         </View>
-        
+
         <Text style={styles.title}>Registration complete</Text>
-        
+
         <Text style={styles.description}>
           Your NGO registration has been received and is under review. You'll receive a confirmation email within 24-48 hours. Once approved, you can complete your organisation profile and access all Hub features.
         </Text>
@@ -41,7 +41,7 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: '#f0f9ff',
+    backgroundColor: '#ecfdf5',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 8,

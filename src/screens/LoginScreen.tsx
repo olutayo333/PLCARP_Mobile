@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, { useState } from 'react';
 import {
   StyleSheet,
   View,
@@ -11,21 +11,25 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import {Eye, EyeOff, Check, ArrowRight} from 'lucide-react-native';
+import { Eye, EyeOff, Check, ArrowRight } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {useLoginMutation} from '../services/authApi';
+import { useLoginMutation } from '../services/authApi';
+import { useDispatch } from 'react-redux';
+import { setUser } from '../store/slices/userSlice';
 
-export function LoginScreen({onLoginSuccess, onRegisterPress, onVisitorPress}: {
+export function LoginScreen({ onLoginSuccess, onRegisterPress, onVisitorPress, onForgotPasswordPress }: {
   onLoginSuccess: () => void;
   onRegisterPress: () => void;
   onVisitorPress: () => void;
+  onForgotPasswordPress: () => void;
 }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
-  
-  const [login, {isLoading}] = useLoginMutation();
+  const dispatch = useDispatch();
+
+  const [login, { isLoading }] = useLoginMutation();
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -34,9 +38,13 @@ export function LoginScreen({onLoginSuccess, onRegisterPress, onVisitorPress}: {
     }
 
     try {
-      const result = await login({email, password}).unwrap();
+      const result = await login({ email, password }).unwrap();
       if (result.data?.token) {
         await AsyncStorage.setItem('token', result.data.token);
+        if (result.data.user) {
+          await AsyncStorage.setItem('user', JSON.stringify(result.data.user));
+          dispatch(setUser(result.data.user));
+        }
         onLoginSuccess();
       } else {
         Alert.alert('Error', 'Invalid login response');
@@ -47,7 +55,7 @@ export function LoginScreen({onLoginSuccess, onRegisterPress, onVisitorPress}: {
   };
 
   return (
-    <KeyboardAvoidingView 
+    <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}
     >
@@ -66,8 +74,8 @@ export function LoginScreen({onLoginSuccess, onRegisterPress, onVisitorPress}: {
         <View style={styles.form}>
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Email address</Text>
-            <TextInput 
-              style={styles.input} 
+            <TextInput
+              style={styles.input}
               placeholder="Enter email"
               placeholderTextColor="#9ca3af"
               value={email}
@@ -80,8 +88,8 @@ export function LoginScreen({onLoginSuccess, onRegisterPress, onVisitorPress}: {
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Password</Text>
             <View style={styles.passwordContainer}>
-              <TextInput 
-                style={styles.passwordInput} 
+              <TextInput
+                style={styles.passwordInput}
                 placeholder="Enter password"
                 placeholderTextColor="#9ca3af"
                 secureTextEntry={!showPassword}
@@ -95,8 +103,8 @@ export function LoginScreen({onLoginSuccess, onRegisterPress, onVisitorPress}: {
           </View>
 
           <View style={styles.row}>
-            <TouchableOpacity 
-              style={styles.checkboxContainer} 
+            <TouchableOpacity
+              style={styles.checkboxContainer}
               onPress={() => setRememberMe(!rememberMe)}
             >
               <View style={[styles.checkbox, rememberMe && styles.checkboxChecked]}>
@@ -104,13 +112,13 @@ export function LoginScreen({onLoginSuccess, onRegisterPress, onVisitorPress}: {
               </View>
               <Text style={styles.checkboxLabel}>Remember me</Text>
             </TouchableOpacity>
-            <TouchableOpacity>
+            <TouchableOpacity onPress={onForgotPasswordPress}>
               <Text style={styles.forgotPassword}>Forgot password?</Text>
             </TouchableOpacity>
           </View>
 
-          <TouchableOpacity 
-            style={[styles.button, isLoading && styles.buttonDisabled]} 
+          <TouchableOpacity
+            style={[styles.button, isLoading && styles.buttonDisabled]}
             onPress={handleLogin}
             disabled={isLoading}
           >
@@ -190,6 +198,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     fontSize: 16,
     color: '#111827',
+    ...Platform.select({
+      web: {
+        outlineStyle: 'none',
+      },
+    }),
   },
   passwordContainer: {
     flexDirection: 'row',
@@ -204,6 +217,11 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     color: '#111827',
+    ...Platform.select({
+      web: {
+        outlineStyle: 'none',
+      },
+    }),
   },
   row: {
     flexDirection: 'row',

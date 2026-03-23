@@ -1,6 +1,6 @@
-import {REQUEST_METHODS} from '../constants/reqMethods';
-import {apiSlice} from './apiSlice';
-import {HttpSuccessResponse, ApiResponse} from '../types/api';
+import { REQUEST_METHODS } from '../constants/reqMethods';
+import { apiSlice } from './apiSlice';
+import { HttpSuccessResponse, ApiResponse } from '../types/api';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -113,7 +113,7 @@ export interface TopicLikeResponse {
   likeCount: number;
 }
 
-export interface CommentLikeResponse extends TopicLikeResponse {}
+export interface CommentLikeResponse extends TopicLikeResponse { }
 
 export interface TopicFilters {
   search?: string;
@@ -206,7 +206,7 @@ export const communityApiSlice = apiSlice.injectEndpoints({
 
     getCommunities: builder.query<PaginatedCommunities, CommunityFilters>({
       query: (filters = {}) => {
-        const {search, page, limit} = filters;
+        const { search, page, limit } = filters;
         const params = new URLSearchParams();
         if (search) params.append('search', search);
         if (page) params.append('page', String(page));
@@ -232,7 +232,7 @@ export const communityApiSlice = apiSlice.injectEndpoints({
       transformResponse: (response: HttpSuccessResponse<CommunitySearchResult>) => {
         return response.data;
       },
-      providesTags: (result, error, id) => [{type: 'Communities', id}],
+      providesTags: (result, error, id) => [{ type: 'Communities', id }],
     }),
 
     subscribeToCommunity: builder.mutation<any, string>({
@@ -259,12 +259,12 @@ export const communityApiSlice = apiSlice.injectEndpoints({
       transformResponse: (response: HttpSuccessResponse<PerCommunityAnalytics>) => {
         return response.data;
       },
-      providesTags: (result, error, id) => [{type: 'Communities', id}],
+      providesTags: (result, error, id) => [{ type: 'Communities', id }],
     }),
 
-    getCommunityTopics: builder.query<PaginatedTopics, {communityId: string; filters?: TopicFilters}>({
-      query: ({communityId, filters = {}}) => {
-        const {search, filter, page, limit} = filters;
+    getCommunityTopics: builder.query<PaginatedTopics, { communityId: string; filters?: TopicFilters }>({
+      query: ({ communityId, filters = {} }) => {
+        const { search, page, limit } = filters;
         const params = new URLSearchParams();
         if (search) params.append('search', search);
         if (page) params.append('page', String(page));
@@ -279,14 +279,14 @@ export const communityApiSlice = apiSlice.injectEndpoints({
       transformResponse: (response: HttpSuccessResponse<PaginatedTopics>) => {
         return response.data;
       },
-      providesTags: (result, error, {communityId}) => [
-        {type: 'Communities', id: `TOPICS_${communityId}`},
+      providesTags: (result, error, { communityId }) => [
+        { type: 'Communities', id: `TOPICS_${communityId}` },
       ],
     }),
 
     getGlobalTopics: builder.query<PaginatedTopics, TopicFilters>({
       query: (filters = {}) => {
-        const {search, page, limit} = filters;
+        const { search, page, limit } = filters;
         const params = new URLSearchParams();
         if (search) params.append('search', search);
         if (page) params.append('page', String(page));
@@ -304,8 +304,8 @@ export const communityApiSlice = apiSlice.injectEndpoints({
       providesTags: ['Communities'],
     }),
 
-    createCommunityTopic: builder.mutation<ApiResponse<CommunityTopic>, {communityId: string; data: CreateTopicDto}>({
-      query: ({communityId, data}) => ({
+    createCommunityTopic: builder.mutation<ApiResponse<CommunityTopic>, { communityId: string; data: CreateTopicDto }>({
+      query: ({ communityId, data }) => ({
         url: `/communities/${communityId}/topics`,
         method: REQUEST_METHODS.POST,
         body: data,
@@ -313,26 +313,26 @@ export const communityApiSlice = apiSlice.injectEndpoints({
       transformResponse: (response: ApiResponse<CommunityTopic>) => {
         return response;
       },
-      invalidatesTags: (result, error, {communityId}) => [
-        {type: 'Communities', id: `TOPICS_${communityId}`},
+      invalidatesTags: (result, error, { communityId }) => [
+        { type: 'Communities', id: `TOPICS_${communityId}` },
       ],
     }),
 
-    getTopicById: builder.query<CommunityTopicDetail, {communityId: string; topicId: string}>({
-      query: ({communityId, topicId}) => ({
+    getTopicById: builder.query<CommunityTopicDetail, { communityId: string; topicId: string }>({
+      query: ({ communityId, topicId }) => ({
         url: `/communities/${communityId}/topics/${topicId}`,
         method: REQUEST_METHODS.GET,
       }),
       transformResponse: (response: HttpSuccessResponse<CommunityTopicDetail>) => {
         return response.data;
       },
-      providesTags: (result, error, {topicId}) => [
-        {type: 'Communities', id: `TOPIC_${topicId}`},
+      providesTags: (result, error, { topicId }) => [
+        { type: 'Communities', id: `TOPIC_${topicId}` },
       ],
     }),
 
-    updateTopic: builder.mutation<CommunityTopicDetail, {communityId: string; topicId: string; data: UpdateTopicDto}>({
-      query: ({communityId, topicId, data}) => ({
+    updateTopic: builder.mutation<CommunityTopicDetail, { communityId: string; topicId: string; data: UpdateTopicDto }>({
+      query: ({ communityId, topicId, data }) => ({
         url: `/communities/${communityId}/topics/${topicId}`,
         method: REQUEST_METHODS.PATCH,
         body: data,
@@ -340,14 +340,14 @@ export const communityApiSlice = apiSlice.injectEndpoints({
       transformResponse: (response: HttpSuccessResponse<CommunityTopicDetail>) => {
         return response.data;
       },
-      invalidatesTags: (result, error, {communityId, topicId}) => [
-        {type: 'Communities', id: `TOPIC_${topicId}`},
-        {type: 'Communities', id: `TOPICS_${communityId}`},
+      invalidatesTags: (result, error, { communityId, topicId }) => [
+        { type: 'Communities', id: `TOPIC_${topicId}` },
+        { type: 'Communities', id: `TOPICS_${communityId}` },
       ],
     }),
 
-    reportTopic: builder.mutation<ApiResponse<any>, {communityId: string; topicId: string; data: ReportTopicDto}>({
-      query: ({communityId, topicId, data}) => ({
+    reportTopic: builder.mutation<ApiResponse<any>, { communityId: string; topicId: string; data: ReportTopicDto }>({
+      query: ({ communityId, topicId, data }) => ({
         url: `/communities/${communityId}/topics/${topicId}/report`,
         method: REQUEST_METHODS.POST,
         body: data,
@@ -355,22 +355,22 @@ export const communityApiSlice = apiSlice.injectEndpoints({
       transformResponse: (response: ApiResponse<any>) => response,
     }),
 
-    toggleTopicLike: builder.mutation<ApiResponse<TopicLikeResponse>, {communityId: string; topicId: string}>({
-      query: ({communityId, topicId}) => ({
+    toggleTopicLike: builder.mutation<ApiResponse<TopicLikeResponse>, { communityId: string; topicId: string }>({
+      query: ({ communityId, topicId }) => ({
         url: `/communities/${communityId}/topics/${topicId}/like`,
         method: REQUEST_METHODS.POST,
       }),
       transformResponse: (response: ApiResponse<TopicLikeResponse>) => {
         return response;
       },
-      invalidatesTags: (result, error, {communityId, topicId}) => [
-        {type: 'Communities', id: `TOPIC_${topicId}`},
-        {type: 'Communities', id: `TOPICS_${communityId}`},
+      invalidatesTags: (result, error, { communityId, topicId }) => [
+        { type: 'Communities', id: `TOPIC_${topicId}` },
+        { type: 'Communities', id: `TOPICS_${communityId}` },
       ],
     }),
 
-    addComment: builder.mutation<ApiResponse<TopicComment>, {communityId: string; topicId: string; data: AddCommentDto}>({
-      query: ({communityId, topicId, data}) => ({
+    addComment: builder.mutation<ApiResponse<TopicComment>, { communityId: string; topicId: string; data: AddCommentDto }>({
+      query: ({ communityId, topicId, data }) => ({
         url: `/communities/${communityId}/topics/${topicId}/comments`,
         method: REQUEST_METHODS.POST,
         body: data,
@@ -378,26 +378,26 @@ export const communityApiSlice = apiSlice.injectEndpoints({
       transformResponse: (response: ApiResponse<TopicComment>) => {
         return response;
       },
-      invalidatesTags: (result, error, {topicId}) => [
-        {type: 'Communities', id: `TOPIC_${topicId}`},
+      invalidatesTags: (result, error, { topicId }) => [
+        { type: 'Communities', id: `TOPIC_${topicId}` },
       ],
     }),
 
-    toggleCommentLike: builder.mutation<ApiResponse<CommentLikeResponse>, {communityId: string; topicId: string; commentId: string}>({
-      query: ({communityId, topicId, commentId}) => ({
+    toggleCommentLike: builder.mutation<ApiResponse<CommentLikeResponse>, { communityId: string; topicId: string; commentId: string }>({
+      query: ({ communityId, topicId, commentId }) => ({
         url: `/communities/${communityId}/topics/${topicId}/comments/${commentId}/like`,
         method: REQUEST_METHODS.POST,
       }),
       transformResponse: (response: ApiResponse<CommentLikeResponse>) => {
         return response;
       },
-      invalidatesTags: (result, error, {topicId}) => [
-        {type: 'Communities', id: `TOPIC_${topicId}`},
+      invalidatesTags: (result, error, { topicId }) => [
+        { type: 'Communities', id: `TOPIC_${topicId}` },
       ],
     }),
 
-    updateComment: builder.mutation<TopicComment, {communityId: string; topicId: string; commentId: string; data: UpdateCommentDto}>({
-      query: ({communityId, topicId, commentId, data}) => ({
+    updateComment: builder.mutation<TopicComment, { communityId: string; topicId: string; commentId: string; data: UpdateCommentDto }>({
+      query: ({ communityId, topicId, commentId, data }) => ({
         url: `/communities/${communityId}/topics/${topicId}/comments/${commentId}`,
         method: REQUEST_METHODS.PATCH,
         body: data,
@@ -405,18 +405,18 @@ export const communityApiSlice = apiSlice.injectEndpoints({
       transformResponse: (response: HttpSuccessResponse<TopicComment>) => {
         return response.data;
       },
-      invalidatesTags: (result, error, {topicId}) => [
-        {type: 'Communities', id: `TOPIC_${topicId}`},
+      invalidatesTags: (result, error, { topicId }) => [
+        { type: 'Communities', id: `TOPIC_${topicId}` },
       ],
     }),
 
-    deleteComment: builder.mutation<void, {communityId: string; topicId: string; commentId: string}>({
-      query: ({communityId, topicId, commentId}) => ({
+    deleteComment: builder.mutation<void, { communityId: string; topicId: string; commentId: string }>({
+      query: ({ communityId, topicId, commentId }) => ({
         url: `/communities/${communityId}/topics/${topicId}/comments/${commentId}`,
         method: REQUEST_METHODS.DELETE,
       }),
-      invalidatesTags: (result, error, {topicId}) => [
-        {type: 'Communities', id: `TOPIC_${topicId}`},
+      invalidatesTags: (result, error, { topicId }) => [
+        { type: 'Communities', id: `TOPIC_${topicId}` },
       ],
     }),
   }),

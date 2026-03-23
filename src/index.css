@@ -1,8 +1,22 @@
 /* Basic reset for the native-web preview */
-html, body, #root {
+html,
+body {
   height: 100%;
   margin: 0;
   padding: 0;
   overflow: hidden;
   background-color: #f3f4f6;
+}
+
+/* Allow the React Native root to fill the screen and allow inner scrolling */
+#root {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Ensure all .css-view elements can participate in flex layout */
+.css-view-175oi2r {
+  position: relative;
 }

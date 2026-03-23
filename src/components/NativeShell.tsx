@@ -10,9 +10,9 @@ import {
   Dimensions,
   Platform,
 } from 'react-native';
-import {Home, Search, Bell, Users, User, Heart} from 'lucide-react-native';
+import { Home, Search, Bell, Users, User, Heart } from 'lucide-react-native';
 
-const {width} = Dimensions.get('window');
+const { width } = Dimensions.get('window');
 
 interface NativeShellProps {
   children: React.ReactNode;
@@ -20,7 +20,7 @@ interface NativeShellProps {
   onTabChange?: (tab: string) => void;
 }
 
-export function NativeShell({children, activeTab = 'home', onTabChange}: NativeShellProps) {
+export function NativeShell({ children, activeTab = 'home', onTabChange }: NativeShellProps) {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
@@ -38,8 +38,8 @@ export function NativeShell({children, activeTab = 'home', onTabChange}: NativeS
         </View>
 
         {/* Main Content */}
-        <ScrollView 
-          style={styles.content} 
+        <ScrollView
+          style={styles.content}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
@@ -59,13 +59,13 @@ export function NativeShell({children, activeTab = 'home', onTabChange}: NativeS
   );
 }
 
-function NavItem({icon, label, active, onPress}: {icon: React.ReactNode; label: string; active?: boolean; onPress?: () => void}) {
+function NavItem({ icon, label, active, onPress }: { icon: React.ReactNode; label: string; active?: boolean; onPress?: () => void }) {
   return (
     <TouchableOpacity style={styles.navItem} onPress={onPress}>
       {React.cloneElement(icon as React.ReactElement, {
         size: 24,
-        color: active ? '#4f46e5' : '#9ca3af',
-        fill: active ? '#4f46e5' : 'transparent'
+        color: active ? '#0e7490' : '#9ca3af',
+        fill: active ? '#0e7490' : 'transparent'
       })}
       <Text style={[styles.navLabel, active && styles.navLabelActive]}>{label}</Text>
     </TouchableOpacity>
@@ -100,7 +100,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#4f46e5',
+    color: '#0e7490',
     letterSpacing: -0.5,
   },
   headerIcons: {
@@ -141,6 +141,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   navLabelActive: {
-    color: '#4f46e5',
+    color: '#0e7490',
   },
 });

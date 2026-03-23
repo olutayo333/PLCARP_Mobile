@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, { useState } from 'react';
 import {
   StyleSheet,
   View,
@@ -9,10 +9,28 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  ActivityIndicator,
+  Modal,
+  FlatList,
 } from 'react-native';
-import {ArrowLeft, ArrowRight, Eye, EyeOff, ChevronDown, Check} from 'lucide-react-native';
+import { ArrowLeft, ArrowRight, Eye, EyeOff, ChevronDown, Check, X } from 'lucide-react-native';
+import { useSignupMutation } from '../services/authApi';
+import { NIGERIA_STATES_LGAS } from '../constants/statesAndLgas';
 
-export function NGORegistrationScreen({onBack, onComplete}: {
+const EXPERTISE_AREAS = [
+  'Governance',
+  'M&E',
+  'Leadership',
+  'Strategic visioning and planning',
+  'Human resource and Finance management',
+  'Resource mobilization',
+  'Project development and implementation',
+  'Communications and branding',
+  'Partnership and network building',
+  'Organizational development and Change management'
+];
+
+export function NGORegistrationScreen({ onBack, onComplete }: {
   onBack: () => void;
   onComplete: () => void;
 }) {
@@ -20,17 +38,41 @@ export function NGORegistrationScreen({onBack, onComplete}: {
   const [showPassword, setShowPassword] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
 
-  // Step 1 Data
+  const [registerApi, { isLoading: registerLoading }] = useSignupMutation();
+
+  // Step 1 Data (Credentials)
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
-  // Step 2 Data
+  // Step 2 Data (Personal Info)
+  const [fullName, setFullName] = useState('');
+  const [title, setTitle] = useState('');
+  const [personalPhone, setPersonalPhone] = useState('');
+  const [yearsOfExperience, setYearsOfExperience] = useState('');
+  const [areasOfExpertise, setAreasOfExpertise] = useState<string[]>([]);
+
+  // Step 3 Data (Org Info)
   const [orgName, setOrgName] = useState('');
   const [cacNumber, setCacNumber] = useState('');
-  const [phone, setPhone] = useState('');
+  const [orgPhone, setOrgPhone] = useState('');
   const [state, setState] = useState('');
   const [lga, setLga] = useState('');
   const [address, setAddress] = useState('');
+
+  // UI State for Pickers
+  const [showStatePicker, setShowStatePicker] = useState(false);
+  const [showLGAPicker, setShowLGAPicker] = useState(false);
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const passwordRegex = /^(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])/;
+
+  const toggleExpertise = (area: string) => {
+    if (areasOfExpertise.includes(area)) {
+      setAreasOfExpertise(areasOfExpertise.filter(i => i !== area));
+    } else {
+      setAreasOfExpertise([...areasOfExpertise, area]);
+    }
+  };
 
   const handleNext = () => {
     if (step === 1) {
@@ -38,50 +80,160 @@ export function NGORegistrationScreen({onBack, onComplete}: {
         Alert.alert('Error', 'Please fill in all fields');
         return;
       }
-      setStep(2);
-    } else {
-      if (!orgName || !cacNumber || !phone || !state || !lga || !address || !termsAccepted) {
-        Alert.alert('Error', 'Please fill in all fields and accept terms');
+      if (!emailRegex.test(email)) {
+        Alert.alert('Error', 'Enter a valid email address');
         return;
       }
-      onComplete();
+      if (!passwordRegex.test(password)) {
+        Alert.alert('Error', 'Password must contain an uppercase letter, a number and a symbol');
+        return;
+      }
+      setStep(2);
+    } else if (step === 2) {
+      if (!fullName || !title || !personalPhone || !yearsOfExperience || areasOfExpertise.length === 0 || !termsAccepted) {
+        Alert.alert('Error', 'Please fill in all fields, select expertise and accept terms');
+        return;
+      }
+      setStep(3);
+    } else {
+      handleSubmit();
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!orgName || !cacNumber || !orgPhone || !state || !lga || !address) {
+      Alert.alert('Error', 'Please fill in all organisation fields');
+      return;
+    }
+
+    const payload = {
+      email,
+      password,
+      fullName,
+      role: 'NGO_MEMBER',
+      orgName,
+      cacNumber,
+      orgPhoneNumber: orgPhone,
+      state,
+      lga,
+      title,
+      phoneNumber: personalPhone,
+      yearsOfExperience: Number(yearsOfExperience),
+      areasOfExpertise,
+      address,
+    };
+
+    try {
+      const response = await registerApi(payload).unwrap();
+      if (response.status) {
+        Alert.alert('Success', 'Registration successful! Please verify your email.');
+        onComplete();
+      } else {
+        Alert.alert('Error', response.message || 'Registration failed');
+      }
+    } catch (error: any) {
+      const serverError = error?.data?.message || 'Registration failed. Please try again.';
+      Alert.alert('Error', serverError);
     }
   };
 
   const handlePrevious = () => {
-    if (step === 2) {
-      setStep(1);
-    } else {
+    if (step === 1) {
       onBack();
+    } else {
+      setStep(step - 1);
     }
   };
 
+  const renderStatePicker = () => (
+    <Modal visible={showStatePicker} animationType="slide" transparent={true}>
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Select State</Text>
+            <TouchableOpacity onPress={() => setShowStatePicker(false)}>
+              <X size={24} color="#111827" />
+            </TouchableOpacity>
+          </View>
+          <FlatList
+            data={Object.keys(NIGERIA_STATES_LGAS).sort()}
+            keyExtractor={(item) => item}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={styles.pickerItem}
+                onPress={() => {
+                  setState(item);
+                  setLga('');
+                  setShowStatePicker(false);
+                }}
+              >
+                <Text style={styles.pickerItemText}>{item}</Text>
+                {state === item && <Check size={20} color="#0e7490" />}
+              </TouchableOpacity>
+            )}
+          />
+        </View>
+      </View>
+    </Modal>
+  );
+
+  const renderLGAPicker = () => (
+    <Modal visible={showLGAPicker} animationType="slide" transparent={true}>
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Select LGA</Text>
+            <TouchableOpacity onPress={() => setShowLGAPicker(false)}>
+              <X size={24} color="#111827" />
+            </TouchableOpacity>
+          </View>
+          <FlatList
+            data={state ? NIGERIA_STATES_LGAS[state].sort() : []}
+            keyExtractor={(item) => item}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={styles.pickerItem}
+                onPress={() => {
+                  setLga(item);
+                  setShowLGAPicker(false);
+                }}
+              >
+                <Text style={styles.pickerItemText}>{item}</Text>
+                {lga === item && <Check size={20} color="#0e7490" />}
+              </TouchableOpacity>
+            )}
+          />
+        </View>
+      </View>
+    </Modal>
+  );
+
   return (
-    <KeyboardAvoidingView 
+    <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}
     >
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.progressContainer}>
           <View style={styles.progressHeader}>
-            <Text style={styles.stepText}>STEP {step} OF 2</Text>
-            <Text style={styles.percentageText}>{step === 1 ? '50%' : '100%'}</Text>
+            <Text style={styles.stepText}>STEP {step} OF 3</Text>
+            <Text style={styles.percentageText}>{Math.round((step / 3) * 100)}%</Text>
           </View>
           <View style={styles.progressBar}>
-            <View style={[styles.progressFill, {width: step === 1 ? '50%' : '100%'}]} />
+            <View style={[styles.progressFill, { width: `${(step / 3) * 100}%` }]} />
           </View>
         </View>
 
-        {step === 1 ? (
+        {step === 1 && (
           <View style={styles.stepContent}>
             <Text style={styles.title}>NGO Registration</Text>
             <Text style={styles.subtitle}>Set up your login credentials for the Hub.</Text>
 
             <View style={styles.form}>
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>Email address</Text>
-                <TextInput 
-                  style={styles.input} 
+                <Text style={styles.label}>Email address <Text style={styles.required}>*</Text></Text>
+                <TextInput
+                  style={styles.input}
                   placeholder="org@email.com"
                   placeholderTextColor="#9ca3af"
                   value={email}
@@ -92,10 +244,10 @@ export function NGORegistrationScreen({onBack, onComplete}: {
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>Password</Text>
+                <Text style={styles.label}>Password <Text style={styles.required}>*</Text></Text>
                 <View style={styles.passwordContainer}>
-                  <TextInput 
-                    style={styles.passwordInput} 
+                  <TextInput
+                    style={styles.passwordInput}
                     placeholder="Min 8 characters"
                     placeholderTextColor="#9ca3af"
                     secureTextEntry={!showPassword}
@@ -110,78 +262,80 @@ export function NGORegistrationScreen({onBack, onComplete}: {
               </View>
             </View>
           </View>
-        ) : (
+        )}
+
+        {step === 2 && (
           <View style={styles.stepContent}>
-            <Text style={styles.title}>About your organisation</Text>
-            <Text style={styles.subtitle}>Tell us about the NGO you are registering.</Text>
+            <Text style={styles.title}>Personal Info</Text>
+            <Text style={styles.subtitle}>Tell us about the person registering the NGO.</Text>
 
             <View style={styles.form}>
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>Name of Organisation <Text style={styles.required}>*</Text></Text>
-                <TextInput 
-                  style={styles.input} 
-                  placeholder="Full registered name of organisation"
+                <Text style={styles.label}>Full Name <Text style={styles.required}>*</Text></Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="John Doe"
                   placeholderTextColor="#9ca3af"
-                  value={orgName}
-                  onChangeText={setOrgName}
+                  value={fullName}
+                  onChangeText={setFullName}
                 />
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>CAC Registration Number <Text style={styles.required}>*</Text></Text>
-                <TextInput 
-                  style={styles.input} 
-                  placeholder="RC123456"
+                <Text style={styles.label}>Title <Text style={styles.required}>*</Text></Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="e.g. Dr., Prof., Engr."
                   placeholderTextColor="#9ca3af"
-                  value={cacNumber}
-                  onChangeText={setCacNumber}
+                  value={title}
+                  onChangeText={setTitle}
                 />
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>Phone number <Text style={styles.required}>*</Text></Text>
-                <TextInput 
-                  style={styles.input} 
-                  placeholder="0801 234 5678"
+                <Text style={styles.label}>Phone Number <Text style={styles.required}>*</Text></Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="0800 000 0000"
                   placeholderTextColor="#9ca3af"
-                  value={phone}
-                  onChangeText={setPhone}
+                  value={personalPhone}
+                  onChangeText={setPersonalPhone}
                   keyboardType="phone-pad"
                 />
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>State <Text style={styles.required}>*</Text></Text>
-                <TouchableOpacity style={styles.dropdown}>
-                  <Text style={[styles.dropdownText, !state && {color: '#9ca3af'}]}>{state || 'Select state...'}</Text>
-                  <ChevronDown size={20} color="#6b7280" />
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>LGA</Text>
-                <TextInput 
-                  style={styles.input} 
-                  placeholder="Local Government Area"
+                <Text style={styles.label}>Years of Experience <Text style={styles.required}>*</Text></Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="e.g. 10"
                   placeholderTextColor="#9ca3af"
-                  value={lga}
-                  onChangeText={setLga}
+                  value={yearsOfExperience}
+                  onChangeText={setYearsOfExperience}
+                  keyboardType="numeric"
                 />
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>Physical Address</Text>
-                <TextInput 
-                  style={styles.input} 
-                  placeholder="Street address"
-                  placeholderTextColor="#9ca3af"
-                  value={address}
-                  onChangeText={setAddress}
-                />
+                <Text style={styles.label}>Areas of Expertise <Text style={styles.required}>*</Text></Text>
+                <View style={styles.expertiseList}>
+                  {EXPERTISE_AREAS.map((item) => (
+                    <TouchableOpacity
+                      key={item}
+                      style={styles.expertiseItem}
+                      onPress={() => toggleExpertise(item)}
+                    >
+                      <View style={[styles.checkbox, areasOfExpertise.includes(item) && styles.checkboxChecked]}>
+                        {areasOfExpertise.includes(item) && <Check size={14} color="#fff" />}
+                      </View>
+                      <Text style={styles.expertiseText}>{item}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
               </View>
 
-              <TouchableOpacity 
-                style={styles.checkboxContainer} 
+              <TouchableOpacity
+                style={styles.checkboxContainer}
                 onPress={() => setTermsAccepted(!termsAccepted)}
               >
                 <View style={[styles.checkbox, termsAccepted && styles.checkboxChecked]}>
@@ -195,17 +349,105 @@ export function NGORegistrationScreen({onBack, onComplete}: {
           </View>
         )}
 
+        {step === 3 && (
+          <View style={styles.stepContent}>
+            <Text style={styles.title}>About your organisation</Text>
+            <Text style={styles.subtitle}>Tell us about the NGO you are registering.</Text>
+
+            <View style={styles.form}>
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Name of Organisation <Text style={styles.required}>*</Text></Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Full registered name of organisation"
+                  placeholderTextColor="#9ca3af"
+                  value={orgName}
+                  onChangeText={setOrgName}
+                />
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>CAC Registration Number <Text style={styles.required}>*</Text></Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="RC123456"
+                  placeholderTextColor="#9ca3af"
+                  value={cacNumber}
+                  onChangeText={setCacNumber}
+                />
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Organisation Phone Number <Text style={styles.required}>*</Text></Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="0801 234 5678"
+                  placeholderTextColor="#9ca3af"
+                  value={orgPhone}
+                  onChangeText={setOrgPhone}
+                  keyboardType="phone-pad"
+                />
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>State <Text style={styles.required}>*</Text></Text>
+                <TouchableOpacity style={styles.dropdown} onPress={() => setShowStatePicker(true)}>
+                  <Text style={[styles.dropdownText, !state && { color: '#9ca3af' }]}>{state || 'Select state...'}</Text>
+                  <ChevronDown size={20} color="#6b7280" />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>LGA <Text style={styles.required}>*</Text></Text>
+                <TouchableOpacity
+                  style={[styles.dropdown, !state && { backgroundColor: '#f3f4f6' }]}
+                  onPress={() => state && setShowLGAPicker(true)}
+                  disabled={!state}
+                >
+                  <Text style={[styles.dropdownText, !lga && { color: '#9ca3af' }]}>{lga || 'Select LGA...'}</Text>
+                  <ChevronDown size={20} color="#6b7280" />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Physical Address <Text style={styles.required}>*</Text></Text>
+                <TextInput
+                  style={[styles.input, styles.textArea]}
+                  placeholder="Street address"
+                  placeholderTextColor="#9ca3af"
+                  value={address}
+                  onChangeText={setAddress}
+                  multiline
+                  numberOfLines={4}
+                />
+              </View>
+            </View>
+          </View>
+        )}
+
         <View style={styles.footer}>
           <TouchableOpacity style={styles.prevButton} onPress={handlePrevious}>
             <ArrowLeft size={20} color="#111827" />
             <Text style={styles.prevButtonText}>Previous</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.nextButton} onPress={handleNext}>
-            <Text style={styles.nextButtonText}>Continue</Text>
-            <ArrowRight size={20} color="#fff" />
+          <TouchableOpacity
+            style={[styles.nextButton, registerLoading && { opacity: 0.7 }]}
+            onPress={handleNext}
+            disabled={registerLoading}
+          >
+            {registerLoading ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <>
+                <Text style={styles.nextButtonText}>{step === 3 ? 'Complete Registration' : 'Continue'}</Text>
+                <ArrowRight size={20} color="#fff" />
+              </>
+            )}
           </TouchableOpacity>
         </View>
       </ScrollView>
+      {renderStatePicker()}
+      {renderLGAPicker()}
     </KeyboardAvoidingView>
   );
 }
@@ -282,6 +524,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     fontSize: 16,
     color: '#111827',
+    ...Platform.select({
+      web: {
+        outlineStyle: 'none',
+      },
+    }),
+  },
+  textArea: {
+    height: 100,
+    textAlignVertical: 'top',
+    paddingTop: 12,
   },
   passwordContainer: {
     flexDirection: 'row',
@@ -296,6 +548,11 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     color: '#111827',
+    ...Platform.select({
+      web: {
+        outlineStyle: 'none',
+      },
+    }),
   },
   hint: {
     fontSize: 12,
@@ -345,6 +602,23 @@ const styles = StyleSheet.create({
     color: '#0e7490',
     fontWeight: '600',
   },
+  expertiseList: {
+    gap: 12,
+  },
+  expertiseItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 8,
+  },
+  expertiseText: {
+    fontSize: 14,
+    color: '#374151',
+    flex: 1,
+  },
   footer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -374,10 +648,47 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     borderRadius: 8,
     backgroundColor: '#0e7490',
+    justifyContent: 'center',
+    minWidth: 140,
   },
   nextButtonText: {
     fontSize: 16,
     fontWeight: '600',
     color: '#fff',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '80%',
+    padding: 24,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#111827',
+  },
+  pickerItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+  },
+  pickerItemText: {
+    fontSize: 16,
+    color: '#374151',
   },
 });

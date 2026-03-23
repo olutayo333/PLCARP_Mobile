@@ -1,8 +1,8 @@
 import React from 'react';
-import {StyleSheet, View, Text, TouchableOpacity, ScrollView} from 'react-native';
-import {ArrowRight, Users, UserCheck, UserPlus} from 'lucide-react-native';
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView } from 'react-native';
+import { ArrowRight, Users, UserCheck, UserPlus } from 'lucide-react-native';
 
-export function RegisterScreen({onBackToLogin, onSelectType}: {
+export function RegisterScreen({ onBackToLogin, onSelectType }: {
   onBackToLogin: () => void;
   onSelectType: (type: 'ngo' | 'expert' | 'guest') => void;
 }) {
@@ -23,8 +23,8 @@ export function RegisterScreen({onBackToLogin, onSelectType}: {
         <Text style={styles.sectionTitle}>I AM JOINING AS...</Text>
 
         <View style={styles.options}>
-          <TouchableOpacity 
-            style={styles.optionCard} 
+          <TouchableOpacity
+            style={styles.optionCard}
             onPress={() => onSelectType('ngo')}
           >
             <View style={styles.optionIconContainer}>
@@ -41,8 +41,8 @@ export function RegisterScreen({onBackToLogin, onSelectType}: {
             </View>
           </TouchableOpacity>
 
-          <TouchableOpacity 
-            style={styles.optionCard} 
+          <TouchableOpacity
+            style={styles.optionCard}
             onPress={() => onSelectType('expert')}
           >
             <View style={styles.optionIconContainer}>
@@ -59,9 +59,9 @@ export function RegisterScreen({onBackToLogin, onSelectType}: {
             </View>
           </TouchableOpacity>
 
-          <TouchableOpacity 
-            style={styles.optionCard} 
-            onSelectType={() => onSelectType('guest')}
+          <TouchableOpacity
+            style={styles.optionCard}
+            onPress={() => onSelectType('guest')}
           >
             <View style={styles.optionIconContainer}>
               <UserPlus size={24} color="#0e7490" />
@@ -140,7 +140,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 8,
-    backgroundColor: '#f0f9ff',
+    backgroundColor: '#ecfdf5',
     alignItems: 'center',
     justifyContent: 'center',
   },

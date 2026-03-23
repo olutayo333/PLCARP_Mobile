@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, { useState } from 'react';
 import {
   StyleSheet,
   View,
@@ -9,22 +9,25 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
-import {ArrowLeft, ArrowRight, Eye, EyeOff, Check} from 'lucide-react-native';
+import { ArrowLeft, ArrowRight, Eye, EyeOff, Check } from 'lucide-react-native';
+import { useSignupMutation } from '../services/authApi';
 
 const EXPERTISE_AREAS = [
+  'Governance',
+  'M&E',
   'Leadership',
   'Strategic visioning and planning',
-  'Effective governance',
   'Human resource and Finance management',
   'Resource mobilization',
   'Project development and implementation',
   'Communications and branding',
   'Partnership and network building',
-  'Organizational development and Change management',
+  'Organizational development and Change management'
 ];
 
-export function ExpertRegistrationScreen({onBack, onComplete}: {
+export function ExpertRegistrationScreen({ onBack, onComplete }: {
   onBack: () => void;
   onComplete: () => void;
 }) {
@@ -33,14 +36,20 @@ export function ExpertRegistrationScreen({onBack, onComplete}: {
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [selectedExpertise, setSelectedExpertise] = useState<string[]>([]);
 
-  // Step 1 Data
+  const [registerApi, { isLoading: registerLoading }] = useSignupMutation();
+
+  // Step 1 Data (Credentials)
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
-  // Step 2 Data
+  // Step 2 Data (Professional Info)
   const [fullName, setFullName] = useState('');
   const [professionalTitle, setProfessionalTitle] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
   const [yearsExperience, setYearsExperience] = useState('');
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const passwordRegex = /^(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])/;
 
   const toggleExpertise = (area: string) => {
     if (selectedExpertise.includes(area)) {
@@ -56,19 +65,54 @@ export function ExpertRegistrationScreen({onBack, onComplete}: {
         Alert.alert('Error', 'Please fill in all fields');
         return;
       }
+      if (!emailRegex.test(email)) {
+        Alert.alert('Error', 'Enter a valid email address');
+        return;
+      }
+      if (!passwordRegex.test(password)) {
+        Alert.alert('Error', 'Password must contain an uppercase letter, a number and a symbol');
+        return;
+      }
       setStep(2);
     } else if (step === 2) {
-      if (!fullName || !professionalTitle || !yearsExperience) {
+      if (!fullName || !professionalTitle || !yearsExperience || !phoneNumber) {
         Alert.alert('Error', 'Please fill in all fields');
         return;
       }
       setStep(3);
     } else {
-      if (selectedExpertise.length === 0 || !termsAccepted) {
-        Alert.alert('Error', 'Please select at least one area of expertise and accept terms');
-        return;
+      handleSubmit();
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (selectedExpertise.length === 0 || !termsAccepted) {
+      Alert.alert('Error', 'Please select at least one area of expertise and accept terms');
+      return;
+    }
+
+    const payload = {
+      email,
+      password,
+      fullName,
+      role: 'EXPERT',
+      title: professionalTitle,
+      phoneNumber,
+      yearsOfExperience: Number(yearsExperience),
+      areasOfExpertise: selectedExpertise,
+    };
+
+    try {
+      const response = await registerApi(payload).unwrap();
+      if (response.status) {
+        Alert.alert('Success', 'Registration successful! Please verify your email.');
+        onComplete();
+      } else {
+        Alert.alert('Error', response.message || 'Registration failed');
       }
-      onComplete();
+    } catch (error: any) {
+      const serverError = error?.data?.message || 'Registration failed. Please try again.';
+      Alert.alert('Error', serverError);
     }
   };
 
@@ -81,7 +125,7 @@ export function ExpertRegistrationScreen({onBack, onComplete}: {
   };
 
   return (
-    <KeyboardAvoidingView 
+    <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}
     >
@@ -92,7 +136,7 @@ export function ExpertRegistrationScreen({onBack, onComplete}: {
             <Text style={styles.percentageText}>{Math.round((step / 3) * 100)}%</Text>
           </View>
           <View style={styles.progressBar}>
-            <View style={[styles.progressFill, {width: `${(step / 3) * 100}%`}]} />
+            <View style={[styles.progressFill, { width: `${(step / 3) * 100}%` }]} />
           </View>
         </View>
 
@@ -103,10 +147,10 @@ export function ExpertRegistrationScreen({onBack, onComplete}: {
 
             <View style={styles.form}>
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>Email address</Text>
-                <TextInput 
-                  style={styles.input} 
-                  placeholder="org@email.com"
+                <Text style={styles.label}>Email address <Text style={styles.required}>*</Text></Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="expert@email.com"
                   placeholderTextColor="#9ca3af"
                   value={email}
                   onChangeText={setEmail}
@@ -116,10 +160,10 @@ export function ExpertRegistrationScreen({onBack, onComplete}: {
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>Password</Text>
+                <Text style={styles.label}>Password <Text style={styles.required}>*</Text></Text>
                 <View style={styles.passwordContainer}>
-                  <TextInput 
-                    style={styles.passwordInput} 
+                  <TextInput
+                    style={styles.passwordInput}
                     placeholder="Min 8 characters"
                     placeholderTextColor="#9ca3af"
                     secureTextEntry={!showPassword}
@@ -138,14 +182,14 @@ export function ExpertRegistrationScreen({onBack, onComplete}: {
 
         {step === 2 && (
           <View style={styles.stepContent}>
-            <Text style={styles.title}>About your organisation</Text>
-            <Text style={styles.subtitle}>Tell us about the NGO you are registering.</Text>
+            <Text style={styles.title}>Professional Info</Text>
+            <Text style={styles.subtitle}>Provide details about your expertise.</Text>
 
             <View style={styles.form}>
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>Full Name</Text>
-                <TextInput 
-                  style={styles.input} 
+                <Text style={styles.label}>Full Name <Text style={styles.required}>*</Text></Text>
+                <TextInput
+                  style={styles.input}
                   placeholder="John Doe"
                   placeholderTextColor="#9ca3af"
                   value={fullName}
@@ -155,8 +199,8 @@ export function ExpertRegistrationScreen({onBack, onComplete}: {
 
               <View style={styles.inputGroup}>
                 <Text style={styles.label}>Professional Title <Text style={styles.required}>*</Text></Text>
-                <TextInput 
-                  style={styles.input} 
+                <TextInput
+                  style={styles.input}
                   placeholder="e.g. Capacity Development Specialist"
                   placeholderTextColor="#9ca3af"
                   value={professionalTitle}
@@ -165,13 +209,26 @@ export function ExpertRegistrationScreen({onBack, onComplete}: {
               </View>
 
               <View style={styles.inputGroup}>
+                <Text style={styles.label}>Phone Number <Text style={styles.required}>*</Text></Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="0800 000 0000"
+                  placeholderTextColor="#9ca3af"
+                  value={phoneNumber}
+                  onChangeText={setPhoneNumber}
+                  keyboardType="phone-pad"
+                />
+              </View>
+
+              <View style={styles.inputGroup}>
                 <Text style={styles.label}>Years of Experience <Text style={styles.required}>*</Text></Text>
-                <TextInput 
-                  style={styles.input} 
-                  placeholder="e.g. 5 years"
+                <TextInput
+                  style={styles.input}
+                  placeholder="e.g. 10"
                   placeholderTextColor="#9ca3af"
                   value={yearsExperience}
                   onChangeText={setYearsExperience}
+                  keyboardType="numeric"
                 />
               </View>
             </View>
@@ -180,15 +237,15 @@ export function ExpertRegistrationScreen({onBack, onComplete}: {
 
         {step === 3 && (
           <View style={styles.stepContent}>
-            <Text style={styles.title}>About your organisation</Text>
-            <Text style={styles.subtitle}>Tell us about the NGO you are registering.</Text>
+            <Text style={styles.title}>Expertise Areas</Text>
+            <Text style={styles.subtitle}>Select the fields you specialize in.</Text>
 
             <View style={styles.form}>
               <Text style={styles.label}>Areas of Expertise <Text style={styles.required}>*</Text></Text>
               <View style={styles.expertiseList}>
                 {EXPERTISE_AREAS.map((area) => (
-                  <TouchableOpacity 
-                    key={area} 
+                  <TouchableOpacity
+                    key={area}
                     style={styles.expertiseItem}
                     onPress={() => toggleExpertise(area)}
                   >
@@ -200,15 +257,15 @@ export function ExpertRegistrationScreen({onBack, onComplete}: {
                 ))}
               </View>
 
-              <TouchableOpacity 
-                style={styles.checkboxContainer} 
+              <TouchableOpacity
+                style={styles.checkboxContainer}
                 onPress={() => setTermsAccepted(!termsAccepted)}
               >
                 <View style={[styles.checkbox, termsAccepted && styles.checkboxChecked]}>
                   {termsAccepted && <Check size={14} color="#fff" />}
                 </View>
                 <Text style={styles.checkboxLabel}>
-                  I have read and understand the <Text style={styles.link}>Terms and Conditions</Text> and agree to join the training/mentorship program, or the Hub community. I confirm all information provided is accurate
+                  I verify that all informations provided is accurate and I understand the <Text style={styles.link}>Terms and Conditions</Text>.
                 </Text>
               </TouchableOpacity>
             </View>
@@ -220,9 +277,19 @@ export function ExpertRegistrationScreen({onBack, onComplete}: {
             <ArrowLeft size={20} color="#111827" />
             <Text style={styles.prevButtonText}>Previous</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.nextButton} onPress={handleNext}>
-            <Text style={styles.nextButtonText}>Continue</Text>
-            <ArrowRight size={20} color="#fff" />
+          <TouchableOpacity
+            style={[styles.nextButton, registerLoading && { opacity: 0.7 }]}
+            onPress={handleNext}
+            disabled={registerLoading}
+          >
+            {registerLoading ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <>
+                <Text style={styles.nextButtonText}>{step === 3 ? 'Complete Registration' : 'Continue'}</Text>
+                <ArrowRight size={20} color="#fff" />
+              </>
+            )}
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -302,6 +369,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     fontSize: 16,
     color: '#111827',
+    ...Platform.select({
+      web: {
+        outlineStyle: 'none',
+      },
+    }),
   },
   passwordContainer: {
     flexDirection: 'row',
@@ -316,6 +388,11 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     color: '#111827',
+    ...Platform.select({
+      web: {
+        outlineStyle: 'none',
+      },
+    }),
   },
   hint: {
     fontSize: 12,
@@ -396,6 +473,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     borderRadius: 8,
     backgroundColor: '#0e7490',
+    justifyContent: 'center',
+    minWidth: 140,
   },
   nextButtonText: {
     fontSize: 16,

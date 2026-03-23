@@ -1,43 +1,28 @@
 import React from 'react';
-import {StyleSheet, View, Text, Image, TouchableOpacity, ImageBackground} from 'react-native';
+import { StyleSheet, View, Text, Image, TouchableOpacity, ImageBackground } from 'react-native';
 
-export function OnboardingScreen({onGetStarted}: {onGetStarted: () => void}) {
+export function OnboardingScreen({ onGetStarted }: { onGetStarted: () => void }) {
   return (
     <View style={styles.container}>
-      <ImageBackground 
-        source={{uri: 'https://picsum.photos/seed/onboarding/800/1200'}} 
+      <ImageBackground
+        source={require('../../assets/home_hero_pics.png')}
         style={styles.backgroundImage}
         resizeMode="cover"
       >
         <View style={styles.overlay}>
           <View style={styles.header}>
             <View style={styles.logoContainer}>
-              <View style={styles.logoWrapper}>
-                <View style={styles.logoIcon}>
-                  <View style={styles.grid}>
-                    {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((i) => (
-                      <View key={i} style={[styles.gridItem, i <= 4 && {backgroundColor: '#4f46e5'}]} />
-                    ))}
-                  </View>
-                </View>
-                <View>
-                  <Text style={styles.logoText}>PLRCAP</Text>
-                  <Text style={styles.logoSubtext}>NIGERIA</Text>
-                </View>
-              </View>
-
+              <Image
+                source={require('../../assets/PLRCAP_ONL_LOGO.png')}
+                style={styles.logoImage}
+                resizeMode="contain"
+              />
               <View style={styles.divider} />
-
-              <View style={styles.logoWrapper}>
-                <View style={styles.norcapLogo}>
-                  <Text style={styles.norcapText}>NOR</Text>
-                  <Text style={styles.norcapText}>CAP</Text>
-                </View>
-                <View>
-                  <Text style={styles.norcapSubtext}>PART OF NORWEGIAN</Text>
-                  <Text style={styles.norcapSubtext}>REFUGEE COUNCIL</Text>
-                </View>
-              </View>
+              <Image
+                source={require('../../assets/NORCAP-logo.png')}
+                style={styles.logoImage}
+                resizeMode="contain"
+              />
             </View>
           </View>
 
@@ -82,59 +67,15 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 8,
   },
-  logoWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  logoIcon: {
-    width: 24,
-    height: 24,
-  },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    width: 18,
-    height: 18,
-    gap: 1,
-  },
-  gridItem: {
-    width: 5,
-    height: 5,
-    backgroundColor: '#9ca3af',
-    borderRadius: 0.5,
-  },
-  logoText: {
-    fontSize: 12,
-    fontWeight: '900',
-    color: '#1e40af',
-    letterSpacing: 0.5,
-  },
-  logoSubtext: {
-    fontSize: 8,
-    fontWeight: 'bold',
-    color: '#1e40af',
+  logoImage: {
+    width: 100,
+    height: 40,
   },
   divider: {
     width: 1,
-    height: 30,
+    height: 24,
     backgroundColor: '#e5e7eb',
-  },
-  norcapLogo: {
-    backgroundColor: '#3b82f6',
-    padding: 2,
-    borderRadius: 1,
-  },
-  norcapText: {
-    color: '#fff',
-    fontSize: 8,
-    fontWeight: '900',
-    lineHeight: 8,
-  },
-  norcapSubtext: {
-    fontSize: 6,
-    fontWeight: 'bold',
-    color: '#374151',
+    marginHorizontal: 4,
   },
   footer: {
     paddingBottom: 48,

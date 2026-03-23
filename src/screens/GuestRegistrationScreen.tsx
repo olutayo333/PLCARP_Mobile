@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, { useState } from 'react';
 import {
   StyleSheet,
   View,
@@ -9,10 +9,12 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
-import {ArrowLeft, ArrowRight, Eye, EyeOff} from 'lucide-react-native';
+import { ArrowLeft, ArrowRight, Eye, EyeOff } from 'lucide-react-native';
+import { useSignupMutation } from '../services/authApi';
 
-export function GuestRegistrationScreen({onBack, onComplete}: {
+export function GuestRegistrationScreen({ onBack, onComplete }: {
   onBack: () => void;
   onComplete: () => void;
 }) {
@@ -21,16 +23,50 @@ export function GuestRegistrationScreen({onBack, onComplete}: {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
-  const handleContinue = () => {
+  const [registerApi, { isLoading: registerLoading }] = useSignupMutation();
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const passwordRegex = /^(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])/;
+
+  const handleContinue = async () => {
     if (!fullName || !email || !password) {
       Alert.alert('Error', 'Please fill in all fields');
       return;
     }
-    onComplete();
+
+    if (!emailRegex.test(email)) {
+      Alert.alert('Error', 'Enter a valid email address');
+      return;
+    }
+
+    if (!passwordRegex.test(password)) {
+      Alert.alert('Error', 'Password must contain an uppercase letter, a number and a symbol');
+      return;
+    }
+
+    const payload = {
+      email,
+      password,
+      fullName,
+      role: 'GUEST',
+    };
+
+    try {
+      const response = await registerApi(payload).unwrap();
+      if (response.status) {
+        Alert.alert('Success', 'Registration successful! Please verify your email.');
+        onComplete();
+      } else {
+        Alert.alert('Error', response.message || 'Registration failed');
+      }
+    } catch (error: any) {
+      const serverError = error?.data?.message || 'Registration failed. Please try again.';
+      Alert.alert('Error', serverError);
+    }
   };
 
   return (
-    <KeyboardAvoidingView 
+    <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}
     >
@@ -42,9 +78,9 @@ export function GuestRegistrationScreen({onBack, onComplete}: {
 
         <View style={styles.form}>
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Full Name</Text>
-            <TextInput 
-              style={styles.input} 
+            <Text style={styles.label}>Full Name <Text style={styles.required}>*</Text></Text>
+            <TextInput
+              style={styles.input}
               placeholder="John Doe"
               placeholderTextColor="#9ca3af"
               value={fullName}
@@ -53,10 +89,10 @@ export function GuestRegistrationScreen({onBack, onComplete}: {
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Email address</Text>
-            <TextInput 
-              style={styles.input} 
-              placeholder="org@email.com"
+            <Text style={styles.label}>Email address <Text style={styles.required}>*</Text></Text>
+            <TextInput
+              style={styles.input}
+              placeholder="guest@email.com"
               placeholderTextColor="#9ca3af"
               value={email}
               onChangeText={setEmail}
@@ -66,10 +102,10 @@ export function GuestRegistrationScreen({onBack, onComplete}: {
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Password</Text>
+            <Text style={styles.label}>Password <Text style={styles.required}>*</Text></Text>
             <View style={styles.passwordContainer}>
-              <TextInput 
-                style={styles.passwordInput} 
+              <TextInput
+                style={styles.passwordInput}
                 placeholder="Min 8 characters"
                 placeholderTextColor="#9ca3af"
                 secureTextEntry={!showPassword}
@@ -89,9 +125,19 @@ export function GuestRegistrationScreen({onBack, onComplete}: {
             <ArrowLeft size={20} color="#111827" />
             <Text style={styles.prevButtonText}>Previous</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.nextButton} onPress={handleContinue}>
-            <Text style={styles.nextButtonText}>Continue</Text>
-            <ArrowRight size={20} color="#fff" />
+          <TouchableOpacity
+            style={[styles.nextButton, registerLoading && { opacity: 0.7 }]}
+            onPress={handleContinue}
+            disabled={registerLoading}
+          >
+            {registerLoading ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <>
+                <Text style={styles.nextButtonText}>Continue</Text>
+                <ArrowRight size={20} color="#fff" />
+              </>
+            )}
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -131,6 +177,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#374151',
+  },
+  required: {
+    color: '#ef4444',
   },
   input: {
     height: 52,
@@ -189,6 +238,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     borderRadius: 8,
     backgroundColor: '#0e7490',
+    justifyContent: 'center',
+    minWidth: 140,
   },
   nextButtonText: {
     fontSize: 16,
