@@ -1,21 +1,11 @@
 import React, { useState } from 'react';
-import {
-  StyleSheet,
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  ScrollView,
-  KeyboardAvoidingView,
-  Platform,
-  Alert,
-  ActivityIndicator,
-  Modal,
-  FlatList,
-} from 'react-native';
+import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, Modal, FlatList } from 'react-native';
 import { ArrowLeft, ArrowRight, Eye, EyeOff, ChevronDown, Check, X } from 'lucide-react-native';
 import { useSignupMutation } from '../services/authApi';
 import { NIGERIA_STATES_LGAS } from '../constants/statesAndLgas';
+import CustomAlert from '../utils/CustomAlert';
+
+const Alert = CustomAlert;
 
 const EXPERTISE_AREAS = [
   'Governance',
@@ -63,6 +53,13 @@ export function NGORegistrationScreen({ onBack, onComplete }: {
   const [showStatePicker, setShowStatePicker] = useState(false);
   const [showLGAPicker, setShowLGAPicker] = useState(false);
 
+  // Cross-platform modal state
+  type ConfirmConfig = { title: string; message: string; confirmText: string; hideCancel?: boolean; danger?: boolean; onConfirm: () => void };
+  const [confirmModal, setConfirmModal] = useState<ConfirmConfig | null>(null);
+
+  const showConfirm = (cfg: ConfirmConfig) => setConfirmModal(cfg);
+  const dismissConfirm = () => setConfirmModal(null);
+
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const passwordRegex = /^(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])/;
 
@@ -77,21 +74,21 @@ export function NGORegistrationScreen({ onBack, onComplete }: {
   const handleNext = () => {
     if (step === 1) {
       if (!email || !password) {
-        Alert.alert('Error', 'Please fill in all fields');
+        showConfirm({ title: 'Error', message: 'Please fill in all fields', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
         return;
       }
       if (!emailRegex.test(email)) {
-        Alert.alert('Error', 'Enter a valid email address');
+        showConfirm({ title: 'Error', message: 'Enter a valid email address', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
         return;
       }
       if (!passwordRegex.test(password)) {
-        Alert.alert('Error', 'Password must contain an uppercase letter, a number and a symbol');
+        showConfirm({ title: 'Error', message: 'Password must contain an uppercase letter, a number and a symbol', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
         return;
       }
       setStep(2);
     } else if (step === 2) {
       if (!fullName || !title || !personalPhone || !yearsOfExperience || areasOfExpertise.length === 0 || !termsAccepted) {
-        Alert.alert('Error', 'Please fill in all fields, select expertise and accept terms');
+        showConfirm({ title: 'Error', message: 'Please fill in all fields, select expertise and accept terms', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
         return;
       }
       setStep(3);
@@ -102,7 +99,7 @@ export function NGORegistrationScreen({ onBack, onComplete }: {
 
   const handleSubmit = async () => {
     if (!orgName || !cacNumber || !orgPhone || !state || !lga || !address) {
-      Alert.alert('Error', 'Please fill in all organisation fields');
+      showConfirm({ title: 'Error', message: 'Please fill in all organisation fields', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
       return;
     }
 
@@ -124,16 +121,21 @@ export function NGORegistrationScreen({ onBack, onComplete }: {
     };
 
     try {
-      const response = await registerApi(payload).unwrap();
+      const response = await registerApi(payload).unwrap() as any;
       if (response.status) {
-        Alert.alert('Success', 'Registration successful! Please verify your email.');
-        onComplete();
+        showConfirm({ 
+          title: 'Success', 
+          message: response.message || 'Registration successful! Please verify your email.', 
+          confirmText: 'Done', 
+          hideCancel: true,
+          onConfirm: () => onComplete() 
+        });
       } else {
-        Alert.alert('Error', response.message || 'Registration failed');
+        showConfirm({ title: 'Error', message: response.message || 'Registration failed', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
       }
     } catch (error: any) {
       const serverError = error?.data?.message || 'Registration failed. Please try again.';
-      Alert.alert('Error', serverError);
+      showConfirm({ title: 'Error', message: serverError, confirmText: 'Retry', hideCancel: true, onConfirm: () => {} });
     }
   };
 
@@ -446,6 +448,38 @@ export function NGORegistrationScreen({ onBack, onComplete }: {
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {/* ── Cross-Platform CONFIRM Modal ── */}
+      <Modal
+        visible={!!confirmModal}
+        transparent
+        animationType="fade"
+        onRequestClose={dismissConfirm}
+      >
+        <View style={styles.confirmOverlay}>
+          <View style={styles.confirmCard}>
+            <Text style={styles.confirmTitle}>{confirmModal?.title}</Text>
+            <Text style={styles.confirmMessage}>{confirmModal?.message}</Text>
+            <View style={styles.confirmActions}>
+              {!confirmModal?.hideCancel && (
+                <TouchableOpacity style={styles.confirmCancelBtn} onPress={dismissConfirm}>
+                  <Text style={styles.confirmCancelText}>Cancel</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={[styles.confirmOkBtn, confirmModal?.danger && styles.confirmDangerBtn]}
+                onPress={() => {
+                  dismissConfirm();
+                  confirmModal?.onConfirm();
+                }}
+              >
+                <Text style={styles.confirmOkText}>{confirmModal?.confirmText}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {renderStatePicker()}
       {renderLGAPicker()}
     </KeyboardAvoidingView>
@@ -690,5 +724,68 @@ const styles = StyleSheet.create({
   pickerItemText: {
     fontSize: 16,
     color: '#374151',
+  },
+  // Premium Confirmation Modal Styles
+  confirmOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  confirmCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 24,
+    width: '100%',
+    maxWidth: 400,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 8,
+  },
+  confirmTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 8,
+  },
+  confirmMessage: {
+    fontSize: 14,
+    color: '#6b7280',
+    lineHeight: 22,
+    marginBottom: 20,
+  },
+  confirmActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  confirmCancelBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: '#f1f5f9',
+    alignItems: 'center',
+  },
+  confirmCancelText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  confirmOkBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: '#0e7490',
+    alignItems: 'center',
+  },
+  confirmDangerBtn: {
+    backgroundColor: '#ef4444',
+  },
+  confirmOkText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#fff',
   },
 });

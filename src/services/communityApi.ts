@@ -69,6 +69,9 @@ export interface TopicComment {
   author: TopicAuthor;
   parentId?: string | null;
   replies?: TopicComment[];
+  mentionedUserId?: string;
+  mentionedUserIds?: string[];
+  createdAt: string;
 }
 
 export interface CommunityTopicDetail {
@@ -102,6 +105,13 @@ export interface ReportTopicDto {
 export interface AddCommentDto {
   body: string;
   parentId?: string;
+  mentionedUserIds?: string[];
+}
+
+export interface CommunityMember {
+  id: string;
+  fullName: string;
+  avatarUrl: string;
 }
 
 export interface UpdateCommentDto {
@@ -301,7 +311,7 @@ export const communityApiSlice = apiSlice.injectEndpoints({
       transformResponse: (response: HttpSuccessResponse<PaginatedTopics>) => {
         return response.data;
       },
-      providesTags: ['Communities'],
+      providesTags: ['Communities', { type: 'Communities', id: 'GLOBAL_TOPICS' }],
     }),
 
     createCommunityTopic: builder.mutation<ApiResponse<CommunityTopic>, { communityId: string; data: CreateTopicDto }>({
@@ -315,6 +325,7 @@ export const communityApiSlice = apiSlice.injectEndpoints({
       },
       invalidatesTags: (result, error, { communityId }) => [
         { type: 'Communities', id: `TOPICS_${communityId}` },
+        { type: 'Communities', id: 'GLOBAL_TOPICS' },
       ],
     }),
 
@@ -343,6 +354,7 @@ export const communityApiSlice = apiSlice.injectEndpoints({
       invalidatesTags: (result, error, { communityId, topicId }) => [
         { type: 'Communities', id: `TOPIC_${topicId}` },
         { type: 'Communities', id: `TOPICS_${communityId}` },
+        { type: 'Communities', id: 'GLOBAL_TOPICS' },
       ],
     }),
 
@@ -366,6 +378,7 @@ export const communityApiSlice = apiSlice.injectEndpoints({
       invalidatesTags: (result, error, { communityId, topicId }) => [
         { type: 'Communities', id: `TOPIC_${topicId}` },
         { type: 'Communities', id: `TOPICS_${communityId}` },
+        { type: 'Communities', id: 'GLOBAL_TOPICS' },
       ],
     }),
 
@@ -380,6 +393,7 @@ export const communityApiSlice = apiSlice.injectEndpoints({
       },
       invalidatesTags: (result, error, { topicId }) => [
         { type: 'Communities', id: `TOPIC_${topicId}` },
+        { type: 'Communities', id: 'GLOBAL_TOPICS' },
       ],
     }),
 
@@ -393,6 +407,7 @@ export const communityApiSlice = apiSlice.injectEndpoints({
       },
       invalidatesTags: (result, error, { topicId }) => [
         { type: 'Communities', id: `TOPIC_${topicId}` },
+        { type: 'Communities', id: 'GLOBAL_TOPICS' },
       ],
     }),
 
@@ -407,6 +422,7 @@ export const communityApiSlice = apiSlice.injectEndpoints({
       },
       invalidatesTags: (result, error, { topicId }) => [
         { type: 'Communities', id: `TOPIC_${topicId}` },
+        { type: 'Communities', id: 'GLOBAL_TOPICS' },
       ],
     }),
 
@@ -417,7 +433,30 @@ export const communityApiSlice = apiSlice.injectEndpoints({
       }),
       invalidatesTags: (result, error, { topicId }) => [
         { type: 'Communities', id: `TOPIC_${topicId}` },
+        { type: 'Communities', id: 'GLOBAL_TOPICS' },
       ],
+    }),
+
+    deleteTopic: builder.mutation<ApiResponse<any>, { communityId: string; topicId: string }>({
+      query: ({ communityId, topicId }) => ({
+        url: `/communities/${communityId}/topics/${topicId}`,
+        method: REQUEST_METHODS.DELETE,
+      }),
+      invalidatesTags: (result, error, { communityId, topicId }) => [
+        { type: 'Communities', id: `TOPIC_${topicId}` },
+        { type: 'Communities', id: `TOPICS_${communityId}` },
+        { type: 'Communities', id: 'GLOBAL_TOPICS' },
+      ],
+    }),
+
+    searchCommunityMembers: builder.query<CommunityMember[], { communityId: string; query: string }>({
+      query: ({ communityId, query }) => ({
+        url: `/communities/${communityId}/members/search?q=${query}`,
+        method: REQUEST_METHODS.GET,
+      }),
+      transformResponse: (response: HttpSuccessResponse<CommunityMember[]>) => {
+        return response.data || [];
+      },
     }),
   }),
 });
@@ -442,4 +481,6 @@ export const {
   useToggleCommentLikeMutation,
   useUpdateCommentMutation,
   useDeleteCommentMutation,
+  useDeleteTopicMutation,
+  useSearchCommunityMembersQuery,
 } = communityApiSlice;

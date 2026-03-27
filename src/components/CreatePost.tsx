@@ -1,21 +1,14 @@
 import React, { useState } from 'react';
-import {
-  StyleSheet,
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  Image,
-  ScrollView,
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  Platform,
-} from 'react-native';
+
+import CustomAlert from '../utils/CustomAlert';
+const Alert = CustomAlert;
+import { StyleSheet, View, Text, TextInput, TouchableOpacity, Image, ScrollView, ActivityIndicator, FlatList, Platform } from 'react-native';;
 import { Camera, X, Image as ImageIcon, ChevronDown } from 'lucide-react-native';
-import * as ImagePicker from 'expo-image-picker';
 import { uploadFile } from '../services/axiosClient';
 import { useGetCommunitiesQuery, useCreateCommunityTopicMutation, CommunitySearchResult } from '../services/communityApi';
+import { useDispatch } from 'react-redux';
+import { showToast } from '../store/slices/uiSlice';
+import { Modal } from 'react-native';
 
 interface CreatePostProps {
   onCancel: () => void;
@@ -23,6 +16,7 @@ interface CreatePostProps {
 }
 
 export function CreatePost({ onCancel, onSuccess }: CreatePostProps) {
+  const dispatch = useDispatch();
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [image, setImage] = useState<string | null>(null);
@@ -33,26 +27,37 @@ export function CreatePost({ onCancel, onSuccess }: CreatePostProps) {
   const { data: communitiesData, isLoading: loadingCommunities } = useGetCommunitiesQuery({});
   const [createTopic] = useCreateCommunityTopicMutation();
 
-  const pickImage = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-    });
+  // Cross-platform modal state
+  type ConfirmConfig = { title: string; message: string; confirmText: string; hideCancel?: boolean; danger?: boolean; onConfirm: () => void };
+  const [confirmModal, setConfirmModal] = useState<ConfirmConfig | null>(null);
 
-    if (!result.canceled) {
-      setImage(result.assets[0].uri);
+  const showConfirm = (cfg: ConfirmConfig) => setConfirmModal(cfg);
+  const dismissConfirm = () => setConfirmModal(null);
+
+  const pickImage = async () => {
+    try {
+      const ImagePicker = await import('expo-image-picker');
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+      if (!result.canceled) {
+        setImage(result.assets[0].uri);
+      }
+    } catch (e) {
+      showConfirm({ title: 'Unavailable', message: 'Image picker is not available on this device.', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
     }
   };
 
   const handlePost = async () => {
     if (!selectedCommunity) {
-      Alert.alert('Error', 'Please select a community');
+      showConfirm({ title: 'Error', message: 'Please select a community', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
       return;
     }
     if (!title || !body) {
-      Alert.alert('Error', 'Please fill in title and body');
+      showConfirm({ title: 'Error', message: 'Please fill in title and body', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
       return;
     }
 
@@ -79,10 +84,15 @@ export function CreatePost({ onCancel, onSuccess }: CreatePostProps) {
         }
       }).unwrap();
 
-      Alert.alert('Success', 'Topic created successfully!');
-      onSuccess();
+      showConfirm({
+        title: 'Success',
+        message: 'Topic created successfully!',
+        confirmText: 'Done',
+        hideCancel: true,
+        onConfirm: () => onSuccess()
+      });
     } catch (error: any) {
-      Alert.alert('Error', error.data?.message || 'Failed to create topic');
+      showConfirm({ title: 'Error', message: error.data?.message || 'Failed to create topic', confirmText: 'Retry', hideCancel: true, onConfirm: () => {} });
     } finally {
       setUploading(false);
     }
@@ -130,8 +140,8 @@ export function CreatePost({ onCancel, onSuccess }: CreatePostProps) {
         <Text style={styles.headerTitle}>New Topic</Text>
         <TouchableOpacity
           onPress={handlePost}
-          disabled={uploading || !title || !body || !selectedCommunity}
-          style={[styles.postButton, (!title || !body || !selectedCommunity || uploading) && styles.postButtonDisabled]}
+          disabled={uploading}
+          style={[styles.postButton, uploading && styles.postButtonDisabled]}
         >
           {uploading ? (
             <ActivityIndicator size="small" color="#fff" />
@@ -196,6 +206,37 @@ export function CreatePost({ onCancel, onSuccess }: CreatePostProps) {
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {/* ── Cross-Platform CONFIRM Modal ── */}
+      <Modal
+        visible={!!confirmModal}
+        transparent
+        animationType="fade"
+        onRequestClose={dismissConfirm}
+      >
+        <View style={styles.confirmOverlay}>
+          <View style={styles.confirmCard}>
+            <Text style={styles.confirmTitle}>{confirmModal?.title}</Text>
+            <Text style={styles.confirmMessage}>{confirmModal?.message}</Text>
+            <View style={styles.confirmActions}>
+              {!confirmModal?.hideCancel && (
+                <TouchableOpacity style={styles.confirmCancelBtn} onPress={dismissConfirm}>
+                  <Text style={styles.confirmCancelText}>Cancel</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={[styles.confirmOkBtn, confirmModal?.danger && styles.confirmDangerBtn]}
+                onPress={() => {
+                  dismissConfirm();
+                  confirmModal?.onConfirm();
+                }}
+              >
+                <Text style={styles.confirmOkText}>{confirmModal?.confirmText}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -256,10 +297,15 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   titleInput: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: 'bold',
     color: '#111827',
-    paddingVertical: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 8,
+    backgroundColor: '#fff',
     ...Platform.select({
       web: {
         outlineStyle: 'none',
@@ -269,8 +315,14 @@ const styles = StyleSheet.create({
   bodyInput: {
     fontSize: 16,
     color: '#374151',
-    minHeight: 120,
+    minHeight: 150,
     textAlignVertical: 'top',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 8,
+    backgroundColor: '#fff',
     ...Platform.select({
       web: {
         outlineStyle: 'none',
@@ -354,5 +406,68 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 40,
     color: '#6b7280',
+  },
+  // Premium Confirmation Modal Styles
+  confirmOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  confirmCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 24,
+    width: '100%',
+    maxWidth: 400,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 8,
+  },
+  confirmTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 8,
+  },
+  confirmMessage: {
+    fontSize: 14,
+    color: '#6b7280',
+    lineHeight: 22,
+    marginBottom: 20,
+  },
+  confirmActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  confirmCancelBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: '#f1f5f9',
+    alignItems: 'center',
+  },
+  confirmCancelText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  confirmOkBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: '#0e7490',
+    alignItems: 'center',
+  },
+  confirmDangerBtn: {
+    backgroundColor: '#ef4444',
+  },
+  confirmOkText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#fff',
   },
 });

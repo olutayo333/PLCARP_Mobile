@@ -1,84 +1,440 @@
-import React, { useState } from 'react';
-import {
-    StyleSheet,
-    View,
-    Text,
-    TouchableOpacity,
-    FlatList,
-    Image,
-} from 'react-native';
-import { Bell } from 'lucide-react-native';
+import React, { useState, useMemo } from 'react';
+
+import CustomAlert from '../utils/CustomAlert';
+const Alert = CustomAlert;
+import { StyleSheet, View, Text, TouchableOpacity, FlatList, Image, ActivityIndicator, RefreshControl, ScrollView, Animated, Modal, Platform } from 'react-native';;
+import { Bell, CheckCheck, Trash2, MessageSquare, Heart, Filter, RefreshCcw, UserCheck, Calendar, ChevronDown, Info, CheckCircle, CheckCircle2, Clock } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { 
+    useGetNotificationsQuery, 
+    useMarkAllReadMutation, 
+    useMarkReadMutation, 
+    useDeleteNotificationMutation,
+    useClearNotificationsMutation,
+    NotificationType,
+    Notification
+} from '../services/notificationApi';
+import { useDispatch } from 'react-redux';
+import { showToast } from '../store/slices/uiSlice';
+
+// Zero-dependency helper to avoid crashes if date-fns is missing
+const timeAgo = (date: Date) => {
+    const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
+    let interval = seconds / 31536000;
+    if (interval > 1) return Math.floor(interval) + " years ago";
+    interval = seconds / 2592000;
+    if (interval > 1) return Math.floor(interval) + " months ago";
+    interval = seconds / 86400;
+    if (interval > 1) return Math.floor(interval) + " days ago";
+    interval = seconds / 3600;
+    if (interval > 1) return Math.floor(interval) + " hours ago";
+    interval = seconds / 60;
+    if (interval > 1) return Math.floor(interval) + " minutes ago";
+    return Math.floor(seconds) + " seconds ago";
+};
 
 export function NotificationScreen({ isLoggedIn, navigation }: { isLoggedIn?: boolean; navigation?: any }) {
-    const [activeTab, setActiveTab] = useState('All');
-    const tabs = [
-        { name: 'All', count: undefined },
-        { name: 'Replies', count: undefined },
-        { name: 'Likes', count: undefined },
-        { name: 'System', count: undefined }
+    const insets = useSafeAreaInsets();
+    const statusTabs = ['All', 'Unread'];
+    
+    // Comprehensive labels for all available notification types from the API
+    const CATEGORIES = [
+        { label: 'Every Category', value: 'All' },
+        { label: 'Account Approved', value: 'ACCOUNT_APPROVED' },
+        { label: 'Account Rejected', value: 'ACCOUNT_REJECTED' },
+        { label: 'Event Registration', value: 'EVENT_REGISTRATION_CONFIRMED' },
+        { label: 'Event Updated', value: 'EVENT_UPDATED' },
+        { label: 'Event Cancelled', value: 'EVENT_CANCELLED' },
+        { label: 'Event Reminder', value: 'EVENT_REMINDER' },
+        { label: 'Mentor Request', value: 'MENTOR_REQUEST_RECEIVED' },
+        { label: 'Mentor Approved', value: 'MENTOR_REQUEST_APPROVED' },
+        { label: 'Mentor Declined', value: 'MENTOR_REQUEST_DECLINED' },
+        { label: 'Mentor Done', value: 'MENTOR_SESSION_COMPLETED' },
+        { label: 'Comments', value: 'COMMUNITY_TOPIC_COMMENT' },
+        { label: 'Mentions', value: 'COMMUNITY_MENTION' },
+        { label: 'Likes', value: 'COMMUNITY_TOPIC_LIKED' },
+        { label: 'Resource Done', value: 'RESOURCE_COMPLETED' },
+        { label: 'Achievements', value: 'ACHIEVEMENT_EARNED' },
+        { label: 'Assessments', value: 'ODA_ASSESSMENT_COMPLETED' },
+        { label: 'System Announcements', value: 'SYSTEM_ANNOUNCEMENT' },
     ];
 
-    const notifications: any[] = [];
+    const [activeStatus, setActiveStatus] = useState<'All' | 'Unread'>('All');
+    const [activeCategory, setActiveCategory] = useState('All');
+    const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
+    const [page, setPage] = useState(1);
 
-    const filteredNotifications = activeTab === 'All'
-        ? notifications
-        : notifications.filter(n => n.type === activeTab);
+    // Cross-platform modal state (replaces Alert.alert which is a no-op on web)
+    type ConfirmConfig = { title: string; message: string; confirmText: string; danger?: boolean; onConfirm: () => void };
+    const [confirmModal, setConfirmModal] = useState<ConfirmConfig | null>(null);
+    const [detailsItem, setDetailsItem] = useState<Notification | null>(null);
+
+    const showConfirm = (cfg: ConfirmConfig) => setConfirmModal(cfg);
+    const dismissConfirm = () => setConfirmModal(null);
+    
+    // API Hooks
+    const { data, isLoading, isFetching, refetch } = useGetNotificationsQuery({ 
+        page, 
+        limit: 20,
+        isRead: activeStatus === 'Unread' ? false : undefined,
+        type: activeCategory === 'All' ? undefined : activeCategory as any,
+    }, { skip: !isLoggedIn });
+
+    const [markAllRead] = useMarkAllReadMutation();
+    const [markRead] = useMarkReadMutation();
+    const [deleteNotification] = useDeleteNotificationMutation();
+    const [clearNotifications] = useClearNotificationsMutation();
+
+    const dispatch = useDispatch();
+
+    const notifications = data?.notifications || [];
+    
+    const handleMarkAllRead = () => {
+        showConfirm({
+            title: 'Mark all as read',
+            message: 'Are you sure you want to mark all notifications as read?',
+            confirmText: 'Mark All',
+            onConfirm: async () => {
+                try {
+                    const response = await markAllRead().unwrap() as any;
+                    dispatch(showToast({
+                        message: response?.message || 'All notifications marked as read',
+                        type: response?.status ? 'success' : 'error'
+                    }));
+                } catch (error: any) {
+                    dispatch(showToast({ message: error?.data?.message || 'Failed to mark as read', type: 'error' }));
+                }
+            }
+        });
+    };
+
+    const handleNotificationPress = async (item: Notification) => {
+        // Mark as read silently
+        if (!item.isRead) {
+            try { await markRead({ ids: [item.id] }).unwrap() as any; } catch (_) {}
+        }
+
+        // Navigate to topic if it's a mention or comment
+        if (item.type === 'COMMUNITY_MENTION' || item.type === 'COMMUNITY_TOPIC_COMMENT') {
+            const data = item.data as any;
+            const cid = data?.communityId || data?.topic?.communityId || data?.comment?.communityId;
+            const tid = data?.topicId || data?.comment?.topicId;
+
+            if (cid && tid) {
+                navigation.navigate('TopicDetail', { communityId: cid, topicId: tid });
+                return;
+            }
+        }
+
+        // Open the in-app details modal for others
+        setDetailsItem(item);
+    };
+
+
+    const handleDelete = (id: string) => {
+        showConfirm({
+            title: 'Delete Notification',
+            message: 'Are you sure you want to delete this notification?',
+            confirmText: 'Delete',
+            danger: true,
+            onConfirm: async () => {
+                try {
+                    const response = await deleteNotification(id).unwrap() as any;
+                    dispatch(showToast({
+                        message: response?.message || 'Notification deleted',
+                        type: response?.status ? 'success' : 'error'
+                    }));
+                } catch (error: any) {
+                    dispatch(showToast({ message: error?.data?.message || 'Failed to delete', type: 'error' }));
+                }
+            }
+        });
+    };
+
+    const getIcon = (type: NotificationType) => {
+        const props = { size: 24 };
+        const MyCheckIcon = CheckCircle2 || CheckCircle || Bell; // Safe fallback
+        if (type.includes('CONFIRMED')) return <MyCheckIcon {...props} color="#10b981" />;
+        if (type.includes('COMMENT') || type.includes('MENTION')) return <MessageSquare {...props} color="#0e7490" />;
+        if (type.includes('LIKED')) return <Heart {...props} color="#ef4444" />;
+        if (type.includes('EVENT')) return <Calendar {...props} color="#0e7490" />;
+        if (type.includes('ACCOUNT') || type.includes('ACHIEVEMENT')) return <UserCheck {...props} color="#10b981" />;
+        return <Info {...props} color="#0e7490" />;
+    };
+
+    const NotificationSkeleton = () => {
+        const shimmerAnim = useMemo(() => new Animated.Value(0), []);
+        
+        React.useEffect(() => {
+            Animated.loop(
+                Animated.sequence([
+                    Animated.timing(shimmerAnim, { toValue: 1, duration: 1000, useNativeDriver: true }),
+                    Animated.timing(shimmerAnim, { toValue: 0, duration: 1000, useNativeDriver: true }),
+                ])
+            ).start();
+        }, [shimmerAnim]);
+
+        const opacity = shimmerAnim.interpolate({
+            inputRange: [0, 1],
+            outputRange: [0.3, 0.7],
+        });
+
+        return (
+            <Animated.View style={[styles.skeletonItem, { opacity }]}>
+                <View style={styles.leftStripSkeleton} />
+                <View style={styles.itemInner}>
+                    <View style={styles.itemMainRow}>
+                        <View style={styles.skeletonIcon} />
+                        <View style={styles.itemHeaderContent}>
+                            <View style={styles.skeletonTitle} />
+                            <View style={styles.skeletonTime} />
+                        </View>
+                    </View>
+                    <View style={styles.skeletonBody} />
+                    <View style={styles.skeletonBodyShort} />
+                </View>
+            </Animated.View>
+        );
+    };
+
+    const renderItem = ({ item }: { item: Notification }) => {
+        const hasMeta = item.data?.meta;
+        const eventTitle = hasMeta?.eventTitle;
+        const startTime = hasMeta?.startTime;
+
+        return (
+            <TouchableOpacity 
+                style={[styles.item, !item.isRead && styles.itemUnread]}
+                onPress={() => handleNotificationPress(item)}
+            >
+                {/* Left Strip */}
+                <View style={[styles.leftStrip, { backgroundColor: item.isRead ? '#e5e7eb' : '#0e7490' }]} />
+                
+                <View style={styles.itemInner}>
+                    <View style={styles.itemMainRow}>
+                        <View style={styles.iconBox}>
+                            {getIcon(item.type)}
+                        </View>
+                        
+                        <View style={styles.itemHeaderContent}>
+                            <View style={styles.itemTitleRow}>
+                                <Text style={[styles.itemTitle, !item.isRead && styles.textBold]}>
+                                    {item.title}
+                                </Text>
+                                {!item.isRead && <View style={styles.unreadDot} />}
+                            </View>
+                            <View style={styles.timeAgoRow}>
+                                <Clock size={14} color="#9ca3af" />
+                                <Text style={styles.itemTime}>
+                                    about {timeAgo(new Date(item.createdAt)).replace(' ago', '')} ago
+                                </Text>
+                            </View>
+                        </View>
+                    </View>
+
+                    <Text style={styles.itemBody} numberOfLines={3}>{item.body}</Text>
+
+                    {/* Metadata Pills */}
+                    {(eventTitle || startTime) && (
+                        <View style={styles.metaContainer}>
+                            {eventTitle && (
+                                <View style={styles.metaPill}>
+                                    <Calendar size={14} color="#0e7490" />
+                                    <Text style={styles.metaPillText} numberOfLines={1}>{eventTitle}</Text>
+                                </View>
+                            )}
+                            {startTime && (
+                                <View style={styles.metaPill}>
+                                    <Clock size={14} color="#0e7490" />
+                                    <Text style={styles.metaPillText}>
+                                        {new Date(startTime).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                    </Text>
+                                </View>
+                            )}
+                        </View>
+                    )}
+
+                    <View style={styles.itemFooter}>
+                        <Text style={styles.viewDetailsText}>VIEW DETAILS</Text>
+                        <TouchableOpacity onPress={() => handleDelete(item.id)} style={styles.deleteButton}>
+                            <Trash2 size={18} color="#d1d5db" />
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </TouchableOpacity>
+        );
+    };
+
+    const handleClearAll = () => {
+        showConfirm({
+            title: 'Clear All Notifications',
+            message: 'Are you sure you want to delete ALL notifications? This cannot be undone.',
+            confirmText: 'Clear All',
+            danger: true,
+            onConfirm: async () => {
+                try {
+                    const response = await clearNotifications().unwrap() as any;
+                    dispatch(showToast({
+                        message: response?.message || 'All notifications cleared',
+                        type: response?.status ? 'success' : 'error'
+                    }));
+                } catch (error: any) {
+                    dispatch(showToast({ message: error?.data?.message || 'Failed to clear notifications', type: 'error' }));
+                }
+            }
+        });
+    };
+
+    const handleLoadMore = () => {
+        if (!data || isFetching) return;
+        const hasMore = data.notifications.length < data.total;
+        if (hasMore) {
+            setPage(prev => prev + 1);
+        }
+    };
+
+    const handleRefresh = () => {
+        setPage(1);
+        refetch();
+    };
+
+    const handleTabChange = (tabName: 'All' | 'Unread') => {
+        setActiveStatus(tabName);
+        setPage(1);
+    };
+
+    const handleCategoryChange = (val: string) => {
+        setActiveCategory(val);
+        setShowCategoryDropdown(false);
+        setPage(1);
+    };
+
+    const selectedCategoryLabel = CATEGORIES.find(c => c.value === activeCategory)?.label || 'Every Category';
 
     return (
         <View style={styles.container}>
-            <View style={styles.header}>
-                <Text style={styles.title}>Alerts</Text>
-                {isLoggedIn && (
-                    <TouchableOpacity>
-                        <Text style={styles.markAllRead}>Mark all as read</Text>
-                    </TouchableOpacity>
-                )}
+            <View style={[styles.header, { paddingTop: insets.top + 24 }]}>
+                <View>
+                    <Text style={styles.title}>Notifications</Text>
+                    {isLoggedIn && data?.unreadCount !== undefined && data.unreadCount > 0 && (
+                        <View style={styles.unreadBadge}>
+                            <Text style={styles.unreadBadgeText}>{data.unreadCount} new</Text>
+                        </View>
+                    )}
+                </View>
             </View>
 
             {isLoggedIn && (
-                <View style={styles.tabs}>
-                    {tabs.map(tab => (
-                        <TouchableOpacity
-                            key={tab.name}
-                            style={[styles.tab, activeTab === tab.name && styles.tabActive]}
-                            onPress={() => setActiveTab(tab.name)}
+                <View style={styles.topControls}>
+                    <View style={styles.filterBar}>
+                        <View style={styles.statusToggles}>
+                            {statusTabs.map(tab => (
+                                <TouchableOpacity
+                                    key={tab}
+                                    style={[styles.statusTab, activeStatus === tab && styles.statusTabActive]}
+                                    onPress={() => handleTabChange(tab as any)}
+                                >
+                                    <Text style={[styles.statusTabText, activeStatus === tab && styles.statusTabTextActive]}>
+                                        {tab}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+
+                        <TouchableOpacity 
+                            style={styles.categoryDropdown}
+                            onPress={() => setShowCategoryDropdown(!showCategoryDropdown)}
                         >
-                            <View style={styles.tabLabelContainer}>
-                                <Text style={[styles.tabText, activeTab === tab.name && styles.tabTextActive]}>
-                                    {tab.name}
-                                </Text>
-                                {tab.count && (
-                                    <View style={[styles.tabBadge, activeTab === tab.name && styles.tabBadgeActive]}>
-                                        <Text style={[styles.tabBadgeText, activeTab === tab.name && styles.tabBadgeTextActive]}>
-                                            {tab.count}
-                                        </Text>
-                                    </View>
-                                )}
-                            </View>
+                            <Filter size={16} color="#9ca3af" />
+                            <Text style={styles.categoryDropdownText} numberOfLines={1}>
+                                {selectedCategoryLabel}
+                            </Text>
+                            <ChevronDown size={16} color="#9ca3af" />
                         </TouchableOpacity>
-                    ))}
+                    </View>
+
+                    {showCategoryDropdown && (
+                        <View style={styles.dropdownMenu}>
+                            <ScrollView style={{ maxHeight: 300 }}>
+                                {CATEGORIES.map((cat) => (
+                                    <TouchableOpacity 
+                                        key={cat.value} 
+                                        style={[styles.dropdownItem, activeCategory === cat.value && styles.dropdownItemActive]}
+                                        onPress={() => handleCategoryChange(cat.value)}
+                                    >
+                                        <Text style={[styles.dropdownItemText, activeCategory === cat.value && styles.dropdownItemTextActive]}>
+                                            {cat.label}
+                                        </Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </ScrollView>
+                        </View>
+                    )}
+
+                    <ScrollView 
+                        horizontal 
+                        showsHorizontalScrollIndicator={false} 
+                        contentContainerStyle={styles.actionBarScroll}
+                        style={styles.actionBarWrapper}
+                    >
+                        <TouchableOpacity 
+                            onPress={(data?.unreadCount || 0) > 0 ? handleMarkAllRead : undefined} 
+                            style={[
+                                styles.headerActionBtn,
+                                (data?.unreadCount || 0) === 0 && { opacity: 0.5, backgroundColor: '#f3f4f6' }
+                            ]}
+                            activeOpacity={(data?.unreadCount || 0) > 0 ? 0.2 : 1}
+                        >
+                            <CheckCheck size={16} color={(data?.unreadCount || 0) > 0 ? '#0e7490' : '#9ca3af'} />
+                            <Text style={[styles.headerActionText, (data?.unreadCount || 0) === 0 && { color: '#9ca3af' }]}>Mark all as read</Text>
+                        </TouchableOpacity>
+                        
+                        <TouchableOpacity onPress={handleRefresh} style={styles.headerActionBtn}>
+                            <RefreshCcw size={16} color="#0e7490" />
+                            <Text style={styles.headerActionText}>Refresh</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity 
+                            onPress={notifications.length > 0 ? handleClearAll : undefined} 
+                            style={[
+                                styles.headerActionBtn,
+                                notifications.length === 0 && { opacity: 0.5, backgroundColor: '#f3f4f6' }
+                            ]}
+                            activeOpacity={notifications.length > 0 ? 0.2 : 1}
+                        >
+                            <Trash2 size={16} color={notifications.length > 0 ? '#ef4444' : '#9ca3af'} />
+                            <Text style={[styles.headerActionText, { color: notifications.length > 0 ? '#ef4444' : '#9ca3af' }]}>
+                                Clear All
+                            </Text>
+                        </TouchableOpacity>
+                    </ScrollView>
                 </View>
             )}
 
             <FlatList
-                data={filteredNotifications}
+                data={notifications}
                 keyExtractor={item => item.id}
-                renderItem={({ item }) => (
-                    <View style={[styles.item, item.unread && styles.itemUnread]}>
-                        <View style={styles.itemContent}>
-                            <View style={styles.itemHeaderRow}>
-                                {item.unread && <View style={styles.unreadDot} />}
-                                <Text style={styles.itemActionText}>
-                                    {item.user && <Text style={styles.itemUser}>{item.user} </Text>}
-                                    {item.action}
-                                </Text>
-                            </View>
-                            <Text style={styles.itemSnippet} numberOfLines={2}>{item.content}</Text>
-                            <Text style={styles.itemTime}>{item.time}</Text>
+                renderItem={renderItem}
+                contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 40 }]}
+                refreshControl={
+                    <RefreshControl refreshing={isFetching && page === 1} onRefresh={handleRefresh} tintColor="#0e7490" />
+                }
+                onEndReached={handleLoadMore}
+                onEndReachedThreshold={0.3}
+                ListFooterComponent={() => (
+                    isFetching && page > 1 ? (
+                        <View style={{ paddingVertical: 20 }}>
+                            <NotificationSkeleton />
                         </View>
-                    </View>
+                    ) : null
                 )}
-                contentContainerStyle={styles.list}
+                ListHeaderComponent={isLoading || (isFetching && page === 1) ? (
+                    <View style={{ paddingTop: 8 }}>
+                        <NotificationSkeleton />
+                        <NotificationSkeleton />
+                        <NotificationSkeleton />
+                    </View>
+                ) : null}
                 ListEmptyComponent={() => (
                     <View style={styles.emptyContainer}>
                         {!isLoggedIn ? (
@@ -101,7 +457,7 @@ export function NotificationScreen({ isLoggedIn, navigation }: { isLoggedIn?: bo
                                     Please <Text style={styles.linkText} onPress={() => navigation?.navigate('Register')}>register</Text> or <Text style={styles.linkText} onPress={() => navigation?.navigate('Login')}>login</Text> to view your personalized notifications and alerts.
                                 </Text>
                             </>
-                        ) : (
+                        ) : !isLoading && (
                             <>
                                 <View style={styles.emptyIconCircle}>
                                     <Bell size={40} color="#9ca3af" />
@@ -115,6 +471,88 @@ export function NotificationScreen({ isLoggedIn, navigation }: { isLoggedIn?: bo
                     </View>
                 )}
             />
+
+            {/* ── Cross-Platform CONFIRM Modal ── */}
+            <Modal
+                visible={!!confirmModal}
+                transparent
+                animationType="fade"
+                onRequestClose={dismissConfirm}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalCard}>
+                        <Text style={styles.modalTitle}>{confirmModal?.title}</Text>
+                        <Text style={styles.modalMessage}>{confirmModal?.message}</Text>
+                        <View style={styles.modalActions}>
+                            <TouchableOpacity style={styles.modalCancelBtn} onPress={dismissConfirm}>
+                                <Text style={styles.modalCancelText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.modalConfirmBtn, confirmModal?.danger && styles.modalDangerBtn]}
+                                onPress={() => {
+                                    dismissConfirm();
+                                    confirmModal?.onConfirm();
+                                }}
+                            >
+                                <Text style={styles.modalConfirmText}>{confirmModal?.confirmText}</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* ── Cross-Platform DETAILS Modal ── */}
+            <Modal
+                visible={!!detailsItem}
+                transparent
+                animationType="slide"
+                onRequestClose={() => setDetailsItem(null)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={[styles.modalCard, { maxHeight: '80%' }]}>
+                        {detailsItem && (
+                            <>
+                                <View style={styles.detailsHeader}>
+                                    <View style={styles.iconBox}>
+                                        {getIcon(detailsItem.type)}
+                                    </View>
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={styles.modalTitle}>{detailsItem.title}</Text>
+                                        <View style={styles.timeAgoRow}>
+                                            <Clock size={13} color="#9ca3af" />
+                                            <Text style={styles.itemTime}>{timeAgo(new Date(detailsItem.createdAt))}</Text>
+                                        </View>
+                                    </View>
+                                </View>
+                                <ScrollView style={{ marginTop: 12 }}>
+                                    <Text style={styles.detailsBody}>{detailsItem.body}</Text>
+
+                                    {detailsItem.data?.meta?.eventTitle && (
+                                        <View style={[styles.metaPill, { marginTop: 12 }]}>
+                                            <Calendar size={14} color="#0e7490" />
+                                            <Text style={styles.metaPillText}>{detailsItem.data.meta.eventTitle}</Text>
+                                        </View>
+                                    )}
+                                    {detailsItem.data?.meta?.startTime && (
+                                        <View style={[styles.metaPill, { marginTop: 8 }]}>
+                                            <Clock size={14} color="#0e7490" />
+                                            <Text style={styles.metaPillText}>
+                                                {new Date(detailsItem.data.meta.startTime).toLocaleString()}
+                                            </Text>
+                                        </View>
+                                    )}
+                                </ScrollView>
+                                <TouchableOpacity
+                                    style={[styles.modalConfirmBtn, { marginTop: 16, alignSelf: 'stretch' }]}
+                                    onPress={() => setDetailsItem(null)}
+                                >
+                                    <Text style={styles.modalConfirmText}>Close</Text>
+                                </TouchableOpacity>
+                            </>
+                        )}
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 }
@@ -128,112 +566,291 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        padding: 16,
-        paddingTop: 24,
+        paddingHorizontal: 24,
+        paddingBottom: 20,
     },
     title: {
-        fontSize: 24,
+        fontSize: 28,
         fontWeight: 'bold',
         color: '#111827',
     },
-    markAllRead: {
-        fontSize: 14,
+    unreadBadge: {
+        backgroundColor: '#fee2e2',
+        borderRadius: 12,
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        alignSelf: 'flex-start',
+        marginTop: 4,
+    },
+    unreadBadgeText: {
+        fontSize: 12,
+        color: '#ef4444',
+        fontWeight: 'bold',
+    },
+    headerActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 16,
+    },
+    headerActionBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        padding: 8,
+        borderRadius: 8,
+        backgroundColor: '#f8fafc',
+        borderWidth: 1,
+        borderColor: '#f1f5f9',
+    },
+    headerActionText: {
+        fontSize: 12,
         color: '#0e7490',
         fontWeight: '600',
     },
-    tabs: {
+    topControls: {
+        paddingBottom: 8,
+    },
+    filterBar: {
         flexDirection: 'row',
-        paddingHorizontal: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: '#f3f4f6',
-    },
-    tab: {
-        paddingVertical: 12,
-        marginRight: 24,
-        borderBottomWidth: 2,
-        borderBottomColor: 'transparent',
-    },
-    tabActive: {
-        borderBottomColor: '#0e7490',
-    },
-    tabLabelContainer: {
-        flexDirection: 'row',
+        justifyContent: 'space-between',
         alignItems: 'center',
-        gap: 4,
+        paddingHorizontal: 24,
+        paddingBottom: 8,
+        zIndex: 10,
     },
-    tabText: {
+    actionBarWrapper: {
+        marginTop: 8,
+        marginBottom: 16,
+        zIndex: 1,
+    },
+    actionBarScroll: {
+        paddingLeft: 12,
+        paddingRight: 24,
+        gap: 8,
+        alignItems: 'center',
+    },
+    statusToggles: {
+        flexDirection: 'row',
+        backgroundColor: '#f3f4f6',
+        padding: 4,
+        borderRadius: 10,
+    },
+    statusTab: {
+        paddingHorizontal: 16,
+        paddingVertical: 6,
+        borderRadius: 8,
+    },
+    statusTabActive: {
+        backgroundColor: '#fff',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 2,
+    },
+    statusTabText: {
         fontSize: 14,
         color: '#6b7280',
         fontWeight: '500',
     },
-    tabTextActive: {
-        color: '#111827',
+    statusTabTextActive: {
+        color: '#0e7490',
         fontWeight: 'bold',
     },
-    tabBadge: {
-        backgroundColor: '#f3f4f6',
-        borderRadius: 10,
-        paddingHorizontal: 6,
-        paddingVertical: 2,
-        minWidth: 20,
+    rightFilters: {
+        flexDirection: 'row',
         alignItems: 'center',
+        gap: 8,
     },
-    tabBadgeActive: {
-        backgroundColor: '#ef4444',
+    categoryDropdown: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#fff',
+        borderWidth: 1,
+        borderColor: '#e5e7eb',
+        borderRadius: 10,
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        gap: 8,
+        maxWidth: 160,
     },
-    tabBadgeText: {
-        fontSize: 10,
-        color: '#6b7280',
+    categoryDropdownText: {
+        fontSize: 14,
+        color: '#374151',
+        fontWeight: '500',
+        flex: 1,
+    },
+    refreshBtn: {
+        width: 40,
+        height: 40,
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: '#e5e7eb',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#fff',
+    },
+    dropdownMenu: {
+        position: 'absolute',
+        top: 50,
+        right: 16,
+        left: 16,
+        backgroundColor: '#fff',
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#f1f5f9',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.1,
+        shadowRadius: 20,
+        elevation: 10,
+        padding: 8,
+    },
+    dropdownItem: {
+        padding: 12,
+        borderRadius: 8,
+    },
+    dropdownItemActive: {
+        backgroundColor: '#f0f9ff',
+    },
+    dropdownItemText: {
+        fontSize: 14,
+        color: '#4b5563',
+    },
+    dropdownItemTextActive: {
+        color: '#0e7490',
         fontWeight: 'bold',
-    },
-    tabBadgeTextActive: {
-        color: '#fff',
     },
     list: {
         flexGrow: 1,
     },
     item: {
-        padding: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: '#f3f4f6',
+        flexDirection: 'row',
+        marginHorizontal: 16,
+        marginBottom: 12,
+        borderRadius: 16,
         backgroundColor: '#fff',
+        overflow: 'hidden',
+        // Shadow for iOS/Web
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+        // Elevation for Android
+        elevation: 2,
+        borderWidth: 1,
+        borderColor: '#f1f5f9',
     },
     itemUnread: {
-        backgroundColor: '#ecfdf5',
+        backgroundColor: '#f8fbff',
+        borderColor: '#dbeafe',
     },
-    itemContent: {
-        gap: 4,
+    leftStrip: {
+        width: 6,
+        height: '100%',
     },
-    itemHeaderRow: {
+    itemInner: {
+        flex: 1,
+        padding: 16,
+        gap: 12,
+    },
+    itemMainRow: {
         flexDirection: 'row',
         alignItems: 'center',
+        gap: 12,
+    },
+    iconBox: {
+        width: 48,
+        height: 48,
+        borderRadius: 14,
+        backgroundColor: '#fff',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 1,
+        borderColor: '#f1f5f9',
+        // Shadow for premium look
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+        elevation: 1,
+    },
+    itemHeaderContent: {
+        flex: 1,
+        gap: 0,
+    },
+    itemTitleRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'flex-start',
         gap: 8,
     },
+    timeAgoRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+    },
+    metaContainer: {
+        flexDirection: 'column',
+        gap: 8,
+        marginTop: 4,
+    },
+    metaPill: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#f8fafc',
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 8,
+        alignSelf: 'flex-start',
+        borderWidth: 1,
+        borderColor: '#f1f5f9',
+        gap: 8,
+    },
+    metaPillText: {
+        fontSize: 12,
+        color: '#475569',
+        fontWeight: '500',
+    },
+    viewDetailsText: {
+        fontSize: 12,
+        color: '#0e7490',
+        fontWeight: 'bold',
+        textDecorationLine: 'underline',
+        letterSpacing: 0.5,
+    },
+
     unreadDot: {
-        width: 6,
-        height: 6,
-        borderRadius: 3,
+        width: 8,
+        height: 8,
+        borderRadius: 4,
         backgroundColor: '#ef4444',
     },
-    itemActionText: {
-        fontSize: 14,
-        color: '#374151',
-        lineHeight: 20,
+    itemTitle: {
+        fontSize: 16,
+        color: '#0e7490', // Blue title as in screenshot
+        flex: 0,
     },
-    itemUser: {
+    textBold: {
         fontWeight: 'bold',
-        color: '#111827',
     },
-    itemSnippet: {
+    itemBody: {
         fontSize: 14,
-        color: '#6b7280',
+        color: '#475569',
         lineHeight: 20,
-        marginTop: 2,
+    },
+    itemFooter: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginTop: 4,
     },
     itemTime: {
         fontSize: 12,
         color: '#9ca3af',
-        marginTop: 4,
+    },
+    deleteButton: {
+        padding: 4,
     },
     emptyContainer: {
         flex: 1,
@@ -287,5 +904,130 @@ const styles = StyleSheet.create({
         color: '#0e7490',
         fontWeight: '600',
         textDecorationLine: 'underline',
+    },
+    // Skeleton Styles
+    skeletonItem: {
+        flexDirection: 'row',
+        marginHorizontal: 16,
+        marginBottom: 12,
+        borderRadius: 16,
+        backgroundColor: '#f9fafb',
+        height: 120,
+        overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: '#f1f5f9',
+    },
+    leftStripSkeleton: {
+        width: 6,
+        height: '100%',
+        backgroundColor: '#e5e7eb',
+    },
+    skeletonIcon: {
+        width: 48,
+        height: 48,
+        borderRadius: 14,
+        backgroundColor: '#e5e7eb',
+    },
+    skeletonTitle: {
+        width: '60%',
+        height: 16,
+        backgroundColor: '#e5e7eb',
+        borderRadius: 4,
+        marginBottom: 8,
+    },
+    skeletonTime: {
+        width: '40%',
+        height: 12,
+        backgroundColor: '#f1f5f9',
+        borderRadius: 4,
+    },
+    skeletonBody: {
+        width: '100%',
+        height: 12,
+        backgroundColor: '#f1f5f9',
+        borderRadius: 4,
+        marginTop: 16,
+    },
+    skeletonBodyShort: {
+        width: '70%',
+        height: 12,
+        backgroundColor: '#f1f5f9',
+        borderRadius: 4,
+        marginTop: 8,
+    },
+
+    // ── Modal Styles ──────────────────────────────────────────
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.45)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 24,
+    },
+    modalCard: {
+        backgroundColor: '#fff',
+        borderRadius: 16,
+        padding: 24,
+        width: '100%',
+        maxWidth: 400,
+        shadowColor: '#000',
+        shadowOpacity: 0.15,
+        shadowRadius: 20,
+        shadowOffset: { width: 0, height: 8 },
+        elevation: 8,
+    },
+    modalTitle: {
+        fontSize: 17,
+        fontWeight: '700',
+        color: '#111827',
+        marginBottom: 8,
+    },
+    modalMessage: {
+        fontSize: 14,
+        color: '#6b7280',
+        lineHeight: 22,
+        marginBottom: 20,
+    },
+    modalActions: {
+        flexDirection: 'row',
+        gap: 12,
+    },
+    modalCancelBtn: {
+        flex: 1,
+        paddingVertical: 12,
+        borderRadius: 10,
+        backgroundColor: '#f1f5f9',
+        alignItems: 'center',
+    },
+    modalCancelText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#374151',
+    },
+    modalConfirmBtn: {
+        flex: 1,
+        paddingVertical: 12,
+        borderRadius: 10,
+        backgroundColor: '#0e7490',
+        alignItems: 'center',
+    },
+    modalDangerBtn: {
+        backgroundColor: '#ef4444',
+    },
+    modalConfirmText: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: '#fff',
+    },
+    detailsHeader: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        gap: 12,
+        marginBottom: 4,
+    },
+    detailsBody: {
+        fontSize: 15,
+        color: '#374151',
+        lineHeight: 24,
     },
 });

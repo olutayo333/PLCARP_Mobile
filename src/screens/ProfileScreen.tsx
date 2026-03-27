@@ -1,16 +1,8 @@
 import React, { useState } from 'react';
-import {
-    StyleSheet,
-    View,
-    Text,
-    TouchableOpacity,
-    ScrollView,
-    TextInput,
-    Modal,
-    ActivityIndicator,
-    Alert,
-    Image,
-} from 'react-native';
+
+import CustomAlert from '../utils/CustomAlert';
+const Alert = CustomAlert;
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView, TextInput, Modal, ActivityIndicator, Image } from 'react-native';;
 import {
     User,
     Building2,
@@ -25,7 +17,7 @@ import {
     Camera,
     Rss,
 } from 'lucide-react-native';
-import * as ImagePicker from 'expo-image-picker';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../store';
 import { logout } from '../store/slices/userSlice';
@@ -41,6 +33,7 @@ import {
 } from '../services/profileApi';
 import { useGetMySubscriptionsQuery } from '../services/communityApi';
 import { useSendPasswordVerificationCodeMutation } from '../services/authApi';
+import { showToast } from '../store/slices/uiSlice';
 import { Skeleton } from '../components/common/Skeleton';
 
 interface ProfileScreenProps {
@@ -50,11 +43,19 @@ interface ProfileScreenProps {
 }
 
 export function ProfileScreen({ navigation }: { navigation?: any }) {
+    const insets = useSafeAreaInsets();
     const dispatch = useDispatch();
     const user = useSelector((state: RootState) => state.user.user);
     const isLoggedIn = useSelector((state: RootState) => state.user.isLoggedIn);
     const { data: profile, isLoading } = useGetUserProfileQuery(undefined, { skip: !isLoggedIn });
-    const [showLogoutModal, setShowLogoutModal] = useState(false);
+    
+    // Cross-platform modal state
+    type ConfirmConfig = { title: string; message: string; confirmText: string; hideCancel?: boolean; danger?: boolean; onConfirm: () => void };
+    const [confirmModal, setConfirmModal] = useState<ConfirmConfig | null>(null);
+
+    const showConfirm = (cfg: ConfirmConfig) => setConfirmModal(cfg);
+    const dismissConfirm = () => setConfirmModal(null);
+
     const [currentSubScreen, setCurrentSubScreen] = useState('main');
 
     const [sendPasswordCode, { isLoading: isSendingPasswordCode }] = useSendPasswordVerificationCodeMutation();
@@ -67,7 +68,7 @@ export function ProfileScreen({ navigation }: { navigation?: any }) {
             await AsyncStorage.removeItem('token');
             await AsyncStorage.removeItem('user');
             dispatch(logout());
-            setShowLogoutModal(false);
+            dismissConfirm();
         } catch (e) {
             console.error('Logout failed', e);
         }
@@ -148,7 +149,7 @@ export function ProfileScreen({ navigation }: { navigation?: any }) {
 
     if (!isLoggedIn) {
         return (
-            <View style={styles.guestContainer}>
+            <View style={[styles.guestContainer, { paddingTop: insets.top }]}>
                 <ScrollView contentContainerStyle={styles.guestScrollContent}>
                     <View style={styles.guestHeader}>
                         <View style={styles.logoContainer}>
@@ -221,7 +222,7 @@ export function ProfileScreen({ navigation }: { navigation?: any }) {
     const handlePasswordReset = async () => {
         const email = profile?.email || user?.email;
         if (!email) {
-            Alert.alert('Error', 'User email not found. Please log in again.');
+            showConfirm({ title: 'Error', message: 'User email not found. Please log in again.', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
             return;
         }
         setPasswordResetSent(false);
@@ -236,7 +237,7 @@ export function ProfileScreen({ navigation }: { navigation?: any }) {
             setPasswordResetSent(true);
         } catch (err: any) {
             console.error('Password reset error:', err);
-            Alert.alert('Error', err?.data?.message || 'Failed to send reset email. Please try again.');
+            showConfirm({ title: 'Error', message: err?.data?.message || 'Failed to send reset email. Please try again.', confirmText: 'Retry', hideCancel: true, onConfirm: () => {} });
         }
     };
 
@@ -261,7 +262,7 @@ export function ProfileScreen({ navigation }: { navigation?: any }) {
     };
 
     return (
-        <View style={styles.profileContainer}>
+        <View style={[styles.profileContainer, { paddingTop: insets.top }]}>
             <ScrollView contentContainerStyle={styles.profileScrollContent} showsVerticalScrollIndicator={false}>
                 <View style={styles.profileHeaderPremium}>
                     <View style={styles.profileAvatarRowPremium}>
@@ -344,7 +345,8 @@ export function ProfileScreen({ navigation }: { navigation?: any }) {
                         <MenuItem
                             icon={Bell}
                             label="Notifications"
-                            subLabel="Push notifications, emails"
+                            subLabel="View your alerts"
+                            onPress={() => navigation?.navigate('Notification')}
                         />
                     </View>
                 </View>
@@ -352,38 +354,67 @@ export function ProfileScreen({ navigation }: { navigation?: any }) {
                 <View style={styles.profileSection}>
                     <Text style={styles.profileSectionHeader}>SUPPORT</Text>
                     <View style={styles.menuCard}>
-                        <MenuItem icon={HelpCircle} label="Help & Support" />
+                        <MenuItem 
+                            icon={HelpCircle} 
+                            label="Help & Support" 
+                            onPress={() => navigation.navigate('HelpSupport')}
+                        />
                         <View style={styles.menuDivider} />
-                        <MenuItem icon={FileText} label="Community guidelines" />
+                        <MenuItem 
+                            icon={FileText} 
+                            label="Community guidelines" 
+                            onPress={() => navigation.navigate('CommunityGuidelines')}
+                        />
                         <View style={styles.menuDivider} />
-                        <MenuItem icon={FileText} label="Terms of service" />
+                        <MenuItem 
+                            icon={FileText} 
+                            label="Terms of service" 
+                            onPress={() => navigation.navigate('TermsOfService')}
+                        />
                         <View style={styles.menuDivider} />
                         <MenuItem
                             icon={LogOut}
                             label="Log out"
                             isLogout
-                            onPress={() => setShowLogoutModal(true)}
+                            onPress={() => showConfirm({
+                                title: 'Confirm Logout',
+                                message: 'Are you sure you want to log out of your account?',
+                                confirmText: 'Logout',
+                                danger: true,
+                                onConfirm: handleLogout
+                            })}
                         />
                     </View>
                 </View>
             </ScrollView>
 
-            {/* Logout Modal */}
+            {/* ── Cross-Platform CONFIRM Modal ── */}
             <Modal
-                visible={showLogoutModal}
+                visible={!!confirmModal}
                 transparent
                 animationType="fade"
-                onRequestClose={() => setShowLogoutModal(false)}
+                onRequestClose={dismissConfirm}
             >
-                <View style={styles.modalOverlay}>
-                    <View style={styles.logoutModal}>
-                        <Text style={styles.logoutModalTitle}>Are you sure you want to log out?</Text>
-                        <TouchableOpacity style={styles.confirmLogoutBtn} onPress={handleLogout}>
-                            <Text style={styles.confirmLogoutText}>Logout</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity style={styles.cancelLogoutBtn} onPress={() => setShowLogoutModal(false)}>
-                            <Text style={styles.cancelLogoutText}>Cancel</Text>
-                        </TouchableOpacity>
+                <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.45)' }]}>
+                    <View style={styles.confirmCard}>
+                        <Text style={styles.confirmTitle}>{confirmModal?.title}</Text>
+                        <Text style={styles.confirmMessage}>{confirmModal?.message}</Text>
+                        <View style={styles.confirmActions}>
+                            {!confirmModal?.hideCancel && (
+                                <TouchableOpacity style={styles.confirmCancelBtn} onPress={dismissConfirm}>
+                                    <Text style={styles.confirmCancelText}>Cancel</Text>
+                                </TouchableOpacity>
+                            )}
+                            <TouchableOpacity
+                                style={[styles.confirmOkBtn, confirmModal?.danger && styles.confirmDangerBtn]}
+                                onPress={() => {
+                                    dismissConfirm();
+                                    confirmModal?.onConfirm();
+                                }}
+                            >
+                                <Text style={styles.confirmOkText}>{confirmModal?.confirmText}</Text>
+                            </TouchableOpacity>
+                        </View>
                     </View>
                 </View>
             </Modal>
@@ -456,56 +487,65 @@ export function ProfileScreen({ navigation }: { navigation?: any }) {
 }
 
 function EditProfileScreen({ onBack }: { onBack: () => void }) {
+    const insets = useSafeAreaInsets();
     const { data: profile, refetch } = useGetUserProfileQuery();
     const [updateProfile, { isLoading: isUpdating }] = useUpdateUserProfileMutation();
     const [fullName, setFullName] = useState(profile?.fullName || '');
     const [phoneNumber, setPhoneNumber] = useState(profile?.phoneNumber || '');
     const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+    const dispatch = useDispatch();
+
+    // Cross-platform modal state
+    type ConfirmConfig = { title: string; message: string; confirmText: string; hideCancel?: boolean; danger?: boolean; onConfirm: () => void };
+    const [confirmModal, setConfirmModal] = useState<ConfirmConfig | null>(null);
+
+    const showConfirm = (cfg: ConfirmConfig) => setConfirmModal(cfg);
+    const dismissConfirm = () => setConfirmModal(null);
 
     const handleEditAvatar = async () => {
-        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (status !== 'granted') {
-            Alert.alert('Permission Denied', 'We need camera roll permissions to change your avatar.');
-            return;
-        }
-
-        const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            allowsEditing: true,
-            aspect: [1, 1],
-            quality: 0.7,
-        });
-
-        if (!result.canceled && result.assets && result.assets.length > 0) {
-            const asset = result.assets[0];
-            const formData = new FormData();
-
-            // Extract filename from URI if not provided
-            const fileName = asset.fileName || asset.uri.split('/').pop() || 'avatar.jpg';
-            // Determine type
-            const type = asset.mimeType || 'image/jpeg';
-
-            // Format for React Native FormData
-            const fileToUpload = {
-                uri: asset.uri,
-                name: fileName,
-                type: type,
-            };
-
-            formData.append('file', fileToUpload as any);
-
-            setIsUploadingAvatar(true);
-            try {
-                const response = await uploadAvatarApi(formData);
-                Alert.alert('Success', 'Profile picture updated successfully!');
-                refetch(); // Reload profile data to clear cached state and show new avatar
-            } catch (error: any) {
-                console.error('Avatar upload failed:', error);
-                const errorMessage = error?.response?.data?.message || 'Failed to upload avatar. Please try again.';
-                Alert.alert('Upload Error', errorMessage);
-            } finally {
-                setIsUploadingAvatar(false);
+        try {
+            // Dynamically import to avoid crashing if native module is unavailable
+            const ImagePicker = await import('expo-image-picker');
+            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (status !== 'granted') {
+                showConfirm({ title: 'Permission Denied', message: 'We need camera roll permissions to change your avatar.', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
+                return;
             }
+
+            const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: true,
+                aspect: [1, 1],
+                quality: 0.7,
+            });
+
+            if (!result.canceled && result.assets && result.assets.length > 0) {
+                const asset = result.assets[0];
+                const formData = new FormData();
+                const fileName = asset.fileName || asset.uri.split('/').pop() || 'avatar.jpg';
+                const type = asset.mimeType || 'image/jpeg';
+                const fileToUpload = { uri: asset.uri, name: fileName, type: type };
+                formData.append('file', fileToUpload as any);
+
+                setIsUploadingAvatar(true);
+                try {
+                    const response = await uploadAvatarApi(formData) as any;
+                    // Our API response structure usually has 'status' instead of 'success'
+                    if (response?.status || response?.success) {
+                        dispatch(showToast({ message: response?.message || 'Profile picture updated successfully!', type: 'success' }));
+                        refetch();
+                    } else {
+                        showConfirm({ title: 'Error', message: response?.message || 'Failed to upload avatar.', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
+                    }
+                } catch (error: any) {
+                    const errorMessage = error?.response?.data?.message || 'Failed to upload avatar. Please try again.';
+                    showConfirm({ title: 'Upload Error', message: errorMessage, confirmText: 'Retry', hideCancel: true, onConfirm: () => {} });
+                } finally {
+                    setIsUploadingAvatar(false);
+                }
+            }
+        } catch (e) {
+            showConfirm({ title: 'Unavailable', message: 'Image picker is not available on this device.', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
         }
     };
 
@@ -547,24 +587,34 @@ function EditProfileScreen({ onBack }: { onBack: () => void }) {
         const digitCount = phoneNumber.replace(/\D/g, '').length;
 
         if (digitCount < 10) {
-            Alert.alert('Invalid Phone Number', 'Phone number must be at least 10 digits.');
+            showConfirm({ title: 'Invalid Phone Number', message: 'Phone number must be at least 10 digits.', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
             return;
         }
 
         try {
             // Clean before sending to API
             const cleanedPhone = phoneNumber.replace(/\s/g, '');
-            const result = await updateProfile({ fullName, phoneNumber: cleanedPhone }).unwrap();
-            Alert.alert('Success', result?.message || 'Profile updated successfully.');
-            onBack();
+            const response = await updateProfile({ fullName, phoneNumber: cleanedPhone }).unwrap();
+            
+            if (response?.status) {
+                showConfirm({ 
+                    title: 'Success', 
+                    message: response.message || 'Profile updated successfully.', 
+                    confirmText: 'Done', 
+                    hideCancel: true,
+                    onConfirm: () => onBack() 
+                });
+            } else {
+                showConfirm({ title: 'Error', message: response?.message || 'Failed to update profile.', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
+            }
         } catch (error) {
             console.error('Failed to update profile:', error);
-            Alert.alert('Error', 'Failed to update profile. Please try again.');
+            showConfirm({ title: 'Error', message: 'Failed to update profile. Please try again.', confirmText: 'Retry', hideCancel: true, onConfirm: () => {} });
         }
     };
 
     return (
-        <View style={styles.editProfileContainer}>
+        <View style={[styles.editProfileContainer, { paddingTop: insets.top }]}>
             <View style={styles.editProfileHeader}>
                 <TouchableOpacity onPress={onBack}>
                     <ArrowLeft size={24} color="#111827" />
@@ -636,30 +686,78 @@ function EditProfileScreen({ onBack }: { onBack: () => void }) {
                     )}
                 </TouchableOpacity>
             </ScrollView>
+
+            {/* ── Cross-Platform CONFIRM Modal (Local) ── */}
+            <Modal
+                visible={!!confirmModal}
+                transparent
+                animationType="fade"
+                onRequestClose={dismissConfirm}
+            >
+                <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.45)' }]}>
+                    <View style={styles.confirmCard}>
+                        <Text style={styles.confirmTitle}>{confirmModal?.title}</Text>
+                        <Text style={styles.confirmMessage}>{confirmModal?.message}</Text>
+                        <View style={styles.confirmActions}>
+                            {!confirmModal?.hideCancel && (
+                                <TouchableOpacity style={styles.confirmCancelBtn} onPress={dismissConfirm}>
+                                    <Text style={styles.confirmCancelText}>Cancel</Text>
+                                </TouchableOpacity>
+                            )}
+                            <TouchableOpacity
+                                style={[styles.confirmOkBtn, confirmModal?.danger && styles.confirmDangerBtn]}
+                                onPress={() => {
+                                    dismissConfirm();
+                                    confirmModal?.onConfirm();
+                                }}
+                            >
+                                <Text style={styles.confirmOkText}>{confirmModal?.confirmText}</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 }
 
 function OrgProfileScreen({ onBack }: { onBack: () => void }) {
+    const insets = useSafeAreaInsets();
     const { data: org } = useGetOrgProfileQuery();
     const [updateOrg, { isLoading: isUpdating }] = useUpdateOrgProfileMutation();
     const [name, setName] = useState(org?.name || '');
     const [description, setDescription] = useState(org?.description || '');
     const [website, setWebsite] = useState(org?.website || '');
 
+    // Cross-platform modal state
+    type ConfirmConfig = { title: string; message: string; confirmText: string; hideCancel?: boolean; danger?: boolean; onConfirm: () => void };
+    const [confirmModal, setConfirmModal] = useState<ConfirmConfig | null>(null);
+
+    const showConfirm = (cfg: ConfirmConfig) => setConfirmModal(cfg);
+    const dismissConfirm = () => setConfirmModal(null);
+
     const handleSave = async () => {
         try {
-            const result = await updateOrg({ name, description, website }).unwrap();
-            Alert.alert('Success', result?.message || 'Organization profile updated.');
-            onBack();
+            const response = await updateOrg({ name, description, website }).unwrap();
+            if (response?.status) {
+                showConfirm({ 
+                    title: 'Success', 
+                    message: response.message || 'Organization profile updated.', 
+                    confirmText: 'Done', 
+                    hideCancel: true,
+                    onConfirm: () => onBack() 
+                });
+            } else {
+                showConfirm({ title: 'Error', message: response?.message || 'Failed to update organization profile.', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
+            }
         } catch (error) {
             console.error('Failed to update org profile:', error);
-            Alert.alert('Error', 'Failed to update organization profile.');
+            showConfirm({ title: 'Error', message: 'Failed to update organization profile.', confirmText: 'Retry', hideCancel: true, onConfirm: () => {} });
         }
     };
 
     return (
-        <View style={styles.editProfileContainer}>
+        <View style={[styles.editProfileContainer, { paddingTop: insets.top }]}>
             <View style={styles.editProfileHeader}>
                 <TouchableOpacity onPress={onBack}>
                     <ArrowLeft size={24} color="#111827" />
@@ -713,34 +811,83 @@ function OrgProfileScreen({ onBack }: { onBack: () => void }) {
                     )}
                 </TouchableOpacity>
             </ScrollView>
+
+            {/* ── Cross-Platform CONFIRM Modal (Local) ── */}
+            <Modal
+                visible={!!confirmModal}
+                transparent
+                animationType="fade"
+                onRequestClose={dismissConfirm}
+            >
+                <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.45)' }]}>
+                    <View style={styles.confirmCard}>
+                        <Text style={styles.confirmTitle}>{confirmModal?.title}</Text>
+                        <Text style={styles.confirmMessage}>{confirmModal?.message}</Text>
+                        <View style={styles.confirmActions}>
+                            {!confirmModal?.hideCancel && (
+                                <TouchableOpacity style={styles.confirmCancelBtn} onPress={dismissConfirm}>
+                                    <Text style={styles.confirmCancelText}>Cancel</Text>
+                                </TouchableOpacity>
+                            )}
+                            <TouchableOpacity
+                                style={[styles.confirmOkBtn, confirmModal?.danger && styles.confirmDangerBtn]}
+                                onPress={() => {
+                                    dismissConfirm();
+                                    confirmModal?.onConfirm();
+                                }}
+                            >
+                                <Text style={styles.confirmOkText}>{confirmModal?.confirmText}</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 }
 
 function ExpertProfileScreen({ onBack }: { onBack: () => void }) {
+    const insets = useSafeAreaInsets();
     const { data: expert } = useGetExpertProfileQuery();
     const [updateExpert, { isLoading: isUpdating }] = useUpdateExpertProfileMutation();
     const [title, setTitle] = useState(expert?.title || '');
     const [about, setAbout] = useState(expert?.about || '');
     const [yearsOfExperience, setYearsOfExperience] = useState(String(expert?.yearsOfExperience || ''));
 
+    // Cross-platform modal state
+    type ConfirmConfig = { title: string; message: string; confirmText: string; hideCancel?: boolean; danger?: boolean; onConfirm: () => void };
+    const [confirmModal, setConfirmModal] = useState<ConfirmConfig | null>(null);
+
+    const showConfirm = (cfg: ConfirmConfig) => setConfirmModal(cfg);
+    const dismissConfirm = () => setConfirmModal(null);
+
     const handleSave = async () => {
         try {
-            const result = await updateExpert({
+            const response = await updateExpert({
                 title,
                 about,
                 yearsOfExperience: parseInt(yearsOfExperience) || 0
             }).unwrap();
-            Alert.alert('Success', result?.message || 'Expert profile updated.');
-            onBack();
+            
+            if (response?.status) {
+                showConfirm({ 
+                    title: 'Success', 
+                    message: response.message || 'Expert profile updated.', 
+                    confirmText: 'Done', 
+                    hideCancel: true,
+                    onConfirm: () => onBack() 
+                });
+            } else {
+                showConfirm({ title: 'Error', message: response?.message || 'Failed to update expert profile.', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
+            }
         } catch (error) {
             console.error('Failed to update expert profile:', error);
-            Alert.alert('Error', 'Failed to update expert profile.');
+            showConfirm({ title: 'Error', message: 'Failed to update expert profile.', confirmText: 'Retry', hideCancel: true, onConfirm: () => {} });
         }
     };
 
     return (
-        <View style={styles.editProfileContainer}>
+        <View style={[styles.editProfileContainer, { paddingTop: insets.top }]}>
             <View style={styles.editProfileHeader}>
                 <TouchableOpacity onPress={onBack}>
                     <ArrowLeft size={24} color="#111827" />
@@ -794,6 +941,37 @@ function ExpertProfileScreen({ onBack }: { onBack: () => void }) {
                     )}
                 </TouchableOpacity>
             </ScrollView>
+
+            {/* ── Cross-Platform CONFIRM Modal (Local) ── */}
+            <Modal
+                visible={!!confirmModal}
+                transparent
+                animationType="fade"
+                onRequestClose={dismissConfirm}
+            >
+                <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.45)' }]}>
+                    <View style={styles.confirmCard}>
+                        <Text style={styles.confirmTitle}>{confirmModal?.title}</Text>
+                        <Text style={styles.confirmMessage}>{confirmModal?.message}</Text>
+                        <View style={styles.confirmActions}>
+                            {!confirmModal?.hideCancel && (
+                                <TouchableOpacity style={styles.confirmCancelBtn} onPress={dismissConfirm}>
+                                    <Text style={styles.confirmCancelText}>Cancel</Text>
+                                </TouchableOpacity>
+                            )}
+                            <TouchableOpacity
+                                style={[styles.confirmOkBtn, confirmModal?.danger && styles.confirmDangerBtn]}
+                                onPress={() => {
+                                    dismissConfirm();
+                                    confirmModal?.onConfirm();
+                                }}
+                            >
+                                <Text style={styles.confirmOkText}>{confirmModal?.confirmText}</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 }
@@ -1063,6 +1241,62 @@ const styles = StyleSheet.create({
     cancelLogoutText: {
         color: '#6b7280',
         fontWeight: '600',
+    },
+    // Standardized Confirm Modal Card
+    confirmCard: {
+        backgroundColor: '#fff',
+        borderRadius: 16,
+        padding: 24,
+        width: '100%',
+        maxWidth: 400,
+        shadowColor: '#000',
+        shadowOpacity: 0.15,
+        shadowRadius: 20,
+        shadowOffset: { width: 0, height: 8 },
+        elevation: 8,
+    },
+    confirmTitle: {
+        fontSize: 17,
+        fontWeight: '700',
+        color: '#111827',
+        marginBottom: 8,
+    },
+    confirmMessage: {
+        fontSize: 14,
+        color: '#64748b',
+        lineHeight: 22,
+        marginBottom: 20,
+    },
+    confirmActions: {
+        flexDirection: 'row',
+        gap: 12,
+    },
+    confirmCancelBtn: {
+        flex: 1,
+        paddingVertical: 12,
+        borderRadius: 10,
+        backgroundColor: '#f1f5f9',
+        alignItems: 'center',
+    },
+    confirmCancelText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#374151',
+    },
+    confirmOkBtn: {
+        flex: 1,
+        paddingVertical: 12,
+        borderRadius: 10,
+        backgroundColor: '#0e7490',
+        alignItems: 'center',
+    },
+    confirmDangerBtn: {
+        backgroundColor: '#ef4444',
+    },
+    confirmOkText: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: '#fff',
     },
     guestContainer: {
         flex: 1,

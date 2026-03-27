@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     StyleSheet,
     View,
@@ -10,7 +10,14 @@ import {
     ActivityIndicator,
     Dimensions,
     Platform,
+    Modal,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useDispatch, useSelector } from 'react-redux';
+import { showToast } from '../store/slices/uiSlice';
+import { RootState } from '../store';
+
+
 import { Skeleton } from '../components/common/Skeleton';
 import {
     Search,
@@ -25,18 +32,103 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../navigation/types';
-import { useGetExpertsQuery } from '../services/profileApi';
+import {
+    useGetGlobalTopicsQuery,
+    useGetCommunitiesQuery,
+    useSubscribeToCommunityMutation,
+    useUnsubscribeFromCommunityMutation
+} from '../services/communityApi';
 import { CommunityCard } from '../components/CommunityCard';
+import { TopicCard } from '../components/TopicCard';
+
 
 export function SearchScreen() {
+    const insets = useSafeAreaInsets();
+    const dispatch = useDispatch();
     const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
     const [searchQuery, setSearchQuery] = useState('');
     const [isSearching, setIsSearching] = useState(false);
-    const [activeSearchTab, setActiveSearchTab] = useState('forum');
+    const [debouncedSearch, setDebouncedSearch] = useState('');
+    const isLoggedIn = useSelector((state: RootState) => state.user.isLoggedIn);
 
-    const { data: expertsData, isLoading: isLoadingExperts } = useGetExpertsQuery(
-        { search: searchQuery },
-        { skip: !isSearching || activeSearchTab !== 'experts' }
+    // Mutation hooks
+    const [subscribe] = useSubscribeToCommunityMutation();
+    const [unsubscribe] = useUnsubscribeFromCommunityMutation();
+
+    // Cross-platform modal state
+    type ConfirmConfig = { title: string; message: string; confirmText: string; danger?: boolean; onConfirm: () => void };
+    const [confirmModal, setConfirmModal] = useState<ConfirmConfig | null>(null);
+
+    const showConfirm = (cfg: ConfirmConfig) => setConfirmModal(cfg);
+    const dismissConfirm = () => setConfirmModal(null);
+
+    const handleCommunityAction = async (community: any) => {
+        if (!isLoggedIn) {
+            showConfirm({
+                title: 'Join Community',
+                message: 'Please register and login to join this community.',
+                confirmText: 'Login',
+                onConfirm: () => {
+                    navigation.navigate('Login');
+                }
+            });
+            return;
+        }
+
+        try {
+            if (community.joined) {
+                showConfirm({
+                    title: 'Leave Community',
+                    message: `Are you sure you want to leave ${community.name}?`,
+                    confirmText: 'Leave',
+                    danger: true,
+                    onConfirm: async () => {
+                        try {
+                            const response = await unsubscribe(community.id).unwrap() as any;
+                            dispatch(showToast({
+                                message: response?.message || 'Left community successfully',
+                                type: response?.status ? 'success' : 'error'
+                            }));
+                        } catch (err: any) {
+                            dispatch(showToast({ message: err?.data?.message || 'Failed to leave community', type: 'error' }));
+                        }
+                    }
+                });
+            } else {
+                const response = await subscribe(community.id).unwrap() as any;
+                dispatch(showToast({
+                    message: response?.message || 'Joined community successfully',
+                    type: response?.status ? 'success' : 'error'
+                }));
+            }
+        } catch (err: any) {
+            const serverError = err?.data?.message || 'Failed to update subscription';
+            dispatch(showToast({ message: serverError, type: 'error' }));
+        }
+    };
+
+    useEffect(() => {
+
+        const timer = setTimeout(() => {
+            setDebouncedSearch(searchQuery);
+        }, 800);
+        return () => clearTimeout(timer);
+    }, [searchQuery]);
+
+    const {
+        data: topicsData,
+        isFetching: isFetchingTopics,
+    } = useGetGlobalTopicsQuery(
+        { search: debouncedSearch, page: 1, limit: 10 },
+        { skip: !debouncedSearch }
+    );
+
+    const {
+        data: communitiesData,
+        isFetching: isFetchingCommunities,
+    } = useGetCommunitiesQuery(
+        { search: debouncedSearch, page: 1, limit: 10 },
+        { skip: !debouncedSearch }
     );
 
     const recentSearches = ['Policy Advocacy', 'Leadership', 'Human Resources', 'Environmental'];
@@ -86,8 +178,17 @@ export function SearchScreen() {
             <View style={styles.searchSection}>
                 <Text style={styles.sectionTitle}>POPULAR COMMUNITIES</Text>
                 <View style={styles.popularCommunitiesList}>
-                    <CommunityCard community={{ id: '1', name: 'Policy Advocacy', category: 'Advocacy', memberCount: 124, topicCount: 8 } as any} />
-                    <CommunityCard community={{ id: '2', name: 'Communications for Advocacy', category: 'Advocacy', memberCount: 124, topicCount: 8 } as any} />
+                    <CommunityCard
+                        community={{ id: '1', name: 'Policy Advocacy', category: 'Advocacy', memberCount: 124, topicCount: 8 } as any}
+                        isLoggedIn={isLoggedIn}
+                        onPress={() => handleCommunityAction({ id: '1', name: 'Policy Advocacy' })}
+                    />
+                    <CommunityCard
+                        community={{ id: '2', name: 'Communications for Advocacy', category: 'Advocacy', memberCount: 124, topicCount: 8 } as any}
+                        isLoggedIn={isLoggedIn}
+                        onPress={() => handleCommunityAction({ id: '2', name: 'Communications for Advocacy' })}
+                    />
+
                     <TouchableOpacity style={styles.loadMoreBtn}>
                         <Text style={styles.loadMoreBtnText}>Load more results</Text>
                     </TouchableOpacity>
@@ -98,85 +199,62 @@ export function SearchScreen() {
 
     const renderResultsView = () => (
         <View style={styles.searchResults}>
-            <View style={styles.searchSubTabs}>
-                <TouchableOpacity
-                    style={[styles.searchSubTab, activeSearchTab === 'forum' && styles.searchSubTabActive]}
-                    onPress={() => setActiveSearchTab('forum')}
-                >
-                    <Text style={[styles.searchSubTabText, activeSearchTab === 'forum' && styles.searchSubTabTextActive]}>Forum</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                    style={[styles.searchSubTab, activeSearchTab === 'experts' && styles.searchSubTabActive]}
-                    onPress={() => setActiveSearchTab('experts')}
-                >
-                    <Text style={[styles.searchSubTabText, activeSearchTab === 'experts' && styles.searchSubTabTextActive]}>Experts</Text>
-                </TouchableOpacity>
-            </View>
-
-            {activeSearchTab === 'forum' ? (
-                <View style={styles.resultsList}>
-                    <View style={styles.resultsHeader}>
-                        <TouchableOpacity style={styles.filterToggle}>
-                            <Text style={styles.filterToggleText}>Filters</Text>
-                        </TouchableOpacity>
-                        <View style={styles.sortInfo}>
-                            <Text style={styles.sortLabel}>Sort: <Text style={styles.sortValue}>Relevance</Text></Text>
-                            <ChevronDown size={16} color="#374151" />
+            {(isFetchingTopics || isFetchingCommunities) ? (
+                <View style={{ padding: 16 }}>
+                    {[1, 2, 3].map(i => (
+                        <View key={i} style={styles.skeletonCard}>
+                            <Skeleton width={40} height={40} borderRadius={20} />
+                            <View style={{ flex: 1, marginLeft: 12 }}>
+                                <Skeleton width="60%" height={16} style={{ marginBottom: 6 }} />
+                                <Skeleton width="90%" height={14} />
+                            </View>
                         </View>
-                    </View>
-                    <Text style={styles.resultsCount}>SEARCH RESULTS</Text>
-                    <View style={styles.centered}><Text style={styles.emptyText}>No results found for "{searchQuery}"</Text></View>
+                    ))}
                 </View>
             ) : (
                 <View style={styles.resultsList}>
-                    <Text style={styles.resultsCount}>EXPERT DIRECTORY</Text>
-                    {isLoadingExperts ? (
-                        <View style={{ paddingHorizontal: 16 }}>
-                            {[1, 2, 3].map(i => (
-                                <View key={i} style={[styles.expertCard, { marginHorizontal: 0 }]}>
-                                    <View style={styles.expertCardHeader}>
-                                        <Skeleton width={44} height={44} borderRadius={22} />
-                                        <View style={{ flex: 1, marginLeft: 12 }}>
-                                            <Skeleton width="60%" height={16} style={{ marginBottom: 6 }} />
-                                            <Skeleton width="40%" height={12} />
-                                        </View>
+                    <ScrollView showsVerticalScrollIndicator={false}>
+                        {topicsData?.topics?.length ? (
+                            <View style={styles.resultsSection}>
+                                <Text style={styles.resultsCount}>TOPICS FOUND ({topicsData.topics.length})</Text>
+                                {topicsData.topics.map((topic: any) => (
+                                    <TopicCard
+                                        key={topic.id}
+                                        topic={topic}
+                                        readOnly={!isLoggedIn}
+                                        onTopicPress={(id) => navigation.navigate('TopicDetail', { communityId: topic.communityId, topicId: id })}
+                                    />
+                                ))}
+                            </View>
+                        ) : null}
+
+                        {communitiesData?.communities?.length ? (
+                            <View style={styles.resultsSection}>
+                                <Text style={styles.resultsCount}>COMMUNITIES FOUND ({communitiesData.communities.length})</Text>
+                                {communitiesData.communities.map((community: any) => (
+                                    <View key={community.id} style={{ paddingHorizontal: 16, marginBottom: 12 }}>
+                                        <CommunityCard
+                                            community={community}
+                                            isLoggedIn={isLoggedIn}
+                                            onPress={() => handleCommunityAction(community)}
+                                        />
+
                                     </View>
-                                    <View style={{ flexDirection: 'row', gap: 12, marginBottom: 8 }}>
-                                        <Skeleton width={60} height={16} borderRadius={4} />
-                                        <Skeleton width={80} height={12} />
-                                    </View>
-                                    <Skeleton width="100%" height={14} style={{ marginBottom: 6 }} />
-                                    <Skeleton width="80%" height={14} style={{ marginBottom: 12 }} />
-                                    <View style={{ flexDirection: 'row', gap: 8 }}>
-                                        <Skeleton width={50} height={20} borderRadius={4} />
-                                        <Skeleton width={50} height={20} borderRadius={4} />
-                                        <Skeleton width={50} height={20} borderRadius={4} />
-                                    </View>
-                                </View>
-                            ))}
-                        </View>
-                    ) : (
-                        <FlatList
-                            data={expertsData?.experts || []}
-                            renderItem={({ item }) => (
-                                <ExpertCard
-                                    expert={item}
-                                    onPress={(id) => navigation.navigate('ExpertDetail', { expertId: id })}
-                                />
-                            )}
-                            keyExtractor={(item) => item.id}
-                            ListEmptyComponent={() => (
-                                <View style={styles.centered}><Text style={styles.emptyText}>No experts found for "{searchQuery}"</Text></View>
-                            )}
-                        />
-                    )}
+                                ))}
+                            </View>
+                        ) : null}
+
+                        {!topicsData?.topics?.length && !communitiesData?.communities?.length && (
+                            <View style={styles.centered}><Text style={styles.emptyText}>No results found for "{searchQuery}"</Text></View>
+                        )}
+                    </ScrollView>
                 </View>
             )}
         </View>
     );
 
     return (
-        <View style={styles.container}>
+        <View style={[styles.container, { paddingTop: insets.top }]}>
             <View style={styles.searchHeader}>
                 <Text style={styles.screenTitle}>Search</Text>
                 <View style={styles.searchBarLarge}>
@@ -197,46 +275,41 @@ export function SearchScreen() {
                     )}
                 </View>
             </View>
-            {isSearching ? renderResultsView() : renderInitialView()}
+            {searchQuery.length > 0 ? renderResultsView() : renderInitialView()}
+
+            {/* ── Cross-Platform CONFIRM Modal ── */}
+            <Modal
+                visible={!!confirmModal}
+                transparent
+                animationType="fade"
+                onRequestClose={dismissConfirm}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalCard}>
+                        <Text style={styles.modalTitle}>{confirmModal?.title}</Text>
+                        <Text style={styles.modalMessage}>{confirmModal?.message}</Text>
+                        <View style={styles.modalActions}>
+                            <TouchableOpacity style={styles.modalCancelBtn} onPress={dismissConfirm}>
+                                <Text style={styles.modalCancelText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.modalConfirmBtn, confirmModal?.danger && styles.modalDangerBtn]}
+                                onPress={() => {
+                                    dismissConfirm();
+                                    confirmModal?.onConfirm();
+                                }}
+                            >
+                                <Text style={styles.modalConfirmText}>{confirmModal?.confirmText}</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 }
 
-function ExpertCard({ expert, onPress }: { expert: any; onPress: (id: string) => void }) {
-    return (
-        <TouchableOpacity style={styles.expertCard} onPress={() => onPress(expert.id)}>
-            <View style={styles.expertCardHeader}>
-                <View style={styles.expertAvatar}>
-                    <Text style={styles.expertAvatarText}>
-                        {expert.fullName?.charAt(0) || 'E'}
-                    </Text>
-                </View>
-                <View style={styles.expertInfo}>
-                    <Text style={styles.expertName}>{expert.fullName}</Text>
-                    <Text style={styles.expertTitle}>{expert.expertProfile?.title || 'Expert'}</Text>
-                </View>
-                <ChevronRight size={20} color="#9ca3af" />
-            </View>
-            <View style={styles.expertMeta}>
-                <View style={styles.expertBadge}>
-                    <ShieldCheck size={12} color="#0e7490" />
-                    <Text style={styles.expertBadgeText}>Verified</Text>
-                </View>
-                <Text style={styles.expertExperience}>{expert.expertProfile?.yearsOfExperience || 0} years exp.</Text>
-            </View>
-            <Text style={styles.expertAbout} numberOfLines={2}>
-                {expert.expertProfile?.about || 'No description available.'}
-            </Text>
-            <View style={styles.expertTags}>
-                {expert.expertProfile?.areasOfExpertise?.slice(0, 3).map((tag: string) => (
-                    <View key={tag} style={styles.expertTag}>
-                        <Text style={styles.expertTagText}>{tag}</Text>
-                    </View>
-                ))}
-            </View>
-        </TouchableOpacity>
-    );
-}
+
 
 const styles = StyleSheet.create({
     container: {
@@ -447,91 +520,79 @@ const styles = StyleSheet.create({
         color: '#0e7490',
         fontWeight: 'bold',
     },
-    expertCard: {
-        backgroundColor: '#fff',
+    skeletonCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
         padding: 16,
+        backgroundColor: '#fff',
         borderRadius: 12,
         marginBottom: 12,
-        borderWidth: 1,
-        borderColor: '#f3f4f6',
-        marginHorizontal: 16,
     },
-    expertCardHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-        marginBottom: 12,
+    resultsSection: {
+        marginBottom: 20,
     },
-    expertAvatar: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        backgroundColor: '#f3f4f6',
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    expertAvatarText: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#0e7490',
-    },
-    expertInfo: {
+    // Modal Styles
+    modalOverlay: {
         flex: 1,
-    },
-    expertName: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: '#111827',
-    },
-    expertTitle: {
-        fontSize: 12,
-        color: '#6b7280',
-    },
-    expertMeta: {
-        flexDirection: 'row',
+        backgroundColor: 'rgba(0,0,0,0.45)',
+        justifyContent: 'center',
         alignItems: 'center',
-        gap: 12,
+        padding: 24,
+    },
+    modalCard: {
+        backgroundColor: '#fff',
+        borderRadius: 16,
+        padding: 24,
+        width: '100%',
+        maxWidth: 400,
+        shadowColor: '#000',
+        shadowOpacity: 0.15,
+        shadowRadius: 20,
+        shadowOffset: { width: 0, height: 8 },
+        elevation: 8,
+    },
+    modalTitle: {
+        fontSize: 17,
+        fontWeight: '700',
+        color: '#111827',
         marginBottom: 8,
     },
-    expertBadge: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
-        backgroundColor: '#ecfdf5',
-        paddingHorizontal: 8,
-        paddingVertical: 2,
-        borderRadius: 4,
-    },
-    expertBadgeText: {
-        fontSize: 10,
-        color: '#0e7490',
-        fontWeight: 'bold',
-    },
-    expertExperience: {
-        fontSize: 12,
-        color: '#9ca3af',
-    },
-    expertAbout: {
+    modalMessage: {
         fontSize: 14,
-        color: '#4b5563',
-        lineHeight: 20,
-        marginBottom: 12,
-    },
-    expertTags: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        gap: 8,
-    },
-    expertTag: {
-        backgroundColor: '#f9fafb',
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 4,
-        borderWidth: 1,
-        borderColor: '#f3f4f6',
-    },
-    expertTagText: {
-        fontSize: 12,
         color: '#6b7280',
+        lineHeight: 22,
+        marginBottom: 20,
+    },
+    modalActions: {
+        flexDirection: 'row',
+        gap: 12,
+    },
+    modalCancelBtn: {
+        flex: 1,
+        paddingVertical: 12,
+        borderRadius: 10,
+        backgroundColor: '#f1f5f9',
+        alignItems: 'center',
+    },
+    modalCancelText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#374151',
+    },
+    modalConfirmBtn: {
+        flex: 1,
+        paddingVertical: 12,
+        borderRadius: 10,
+        backgroundColor: '#0e7490',
+        alignItems: 'center',
+    },
+    modalDangerBtn: {
+        backgroundColor: '#ef4444',
+    },
+    modalConfirmText: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: '#fff',
     },
 });
+

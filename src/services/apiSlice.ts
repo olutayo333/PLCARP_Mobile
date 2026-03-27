@@ -66,6 +66,7 @@ export const apiSlice = createApi({
     'SpotlightSettings',
     'SpotlightQueue',
     'SpotlightHistory',
+    'Notifications',
   ],
   endpoints: () => ({}),
 });

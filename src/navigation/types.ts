@@ -35,4 +35,7 @@ export type ProfileStackParamList = {
     EditProfile: undefined;
     OrgProfile: undefined;
     ExpertProfile: undefined;
+    HelpSupport: undefined;
+    CommunityGuidelines: undefined;
+    TermsOfService: undefined;
 };

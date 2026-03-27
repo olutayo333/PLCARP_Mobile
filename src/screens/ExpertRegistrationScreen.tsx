@@ -1,18 +1,10 @@
 import React, { useState } from 'react';
-import {
-  StyleSheet,
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  ScrollView,
-  KeyboardAvoidingView,
-  Platform,
-  Alert,
-  ActivityIndicator,
-} from 'react-native';
+import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, Modal } from 'react-native';
 import { ArrowLeft, ArrowRight, Eye, EyeOff, Check } from 'lucide-react-native';
 import { useSignupMutation } from '../services/authApi';
+import CustomAlert from '../utils/CustomAlert';
+
+const Alert = CustomAlert;
 
 const EXPERTISE_AREAS = [
   'Governance',
@@ -48,6 +40,13 @@ export function ExpertRegistrationScreen({ onBack, onComplete }: {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [yearsExperience, setYearsExperience] = useState('');
 
+  // Cross-platform modal state
+  type ConfirmConfig = { title: string; message: string; confirmText: string; hideCancel?: boolean; danger?: boolean; onConfirm: () => void };
+  const [confirmModal, setConfirmModal] = useState<ConfirmConfig | null>(null);
+
+  const showConfirm = (cfg: ConfirmConfig) => setConfirmModal(cfg);
+  const dismissConfirm = () => setConfirmModal(null);
+
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const passwordRegex = /^(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])/;
 
@@ -62,21 +61,21 @@ export function ExpertRegistrationScreen({ onBack, onComplete }: {
   const handleNext = () => {
     if (step === 1) {
       if (!email || !password) {
-        Alert.alert('Error', 'Please fill in all fields');
+        showConfirm({ title: 'Error', message: 'Please fill in all fields', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
         return;
       }
       if (!emailRegex.test(email)) {
-        Alert.alert('Error', 'Enter a valid email address');
+        showConfirm({ title: 'Error', message: 'Enter a valid email address', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
         return;
       }
       if (!passwordRegex.test(password)) {
-        Alert.alert('Error', 'Password must contain an uppercase letter, a number and a symbol');
+        showConfirm({ title: 'Error', message: 'Password must contain an uppercase letter, a number and a symbol', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
         return;
       }
       setStep(2);
     } else if (step === 2) {
       if (!fullName || !professionalTitle || !yearsExperience || !phoneNumber) {
-        Alert.alert('Error', 'Please fill in all fields');
+        showConfirm({ title: 'Error', message: 'Please fill in all fields', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
         return;
       }
       setStep(3);
@@ -87,7 +86,7 @@ export function ExpertRegistrationScreen({ onBack, onComplete }: {
 
   const handleSubmit = async () => {
     if (selectedExpertise.length === 0 || !termsAccepted) {
-      Alert.alert('Error', 'Please select at least one area of expertise and accept terms');
+      showConfirm({ title: 'Error', message: 'Please select at least one area of expertise and accept terms', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
       return;
     }
 
@@ -105,14 +104,19 @@ export function ExpertRegistrationScreen({ onBack, onComplete }: {
     try {
       const response = await registerApi(payload).unwrap();
       if (response.status) {
-        Alert.alert('Success', 'Registration successful! Please verify your email.');
-        onComplete();
+        showConfirm({ 
+          title: 'Success', 
+          message: response?.message || 'Registration successful! Please verify your email.', 
+          confirmText: 'Great!', 
+          hideCancel: true,
+          onConfirm: () => onComplete() 
+        });
       } else {
-        Alert.alert('Error', response.message || 'Registration failed');
+        showConfirm({ title: 'Error', message: response.message || 'Registration failed', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
       }
     } catch (error: any) {
       const serverError = error?.data?.message || 'Registration failed. Please try again.';
-      Alert.alert('Error', serverError);
+      showConfirm({ title: 'Error', message: serverError, confirmText: 'Retry', hideCancel: true, onConfirm: () => {} });
     }
   };
 
@@ -293,6 +297,37 @@ export function ExpertRegistrationScreen({ onBack, onComplete }: {
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {/* ── Cross-Platform CONFIRM Modal ── */}
+      <Modal
+        visible={!!confirmModal}
+        transparent
+        animationType="fade"
+        onRequestClose={dismissConfirm}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>{confirmModal?.title}</Text>
+            <Text style={styles.modalMessage}>{confirmModal?.message}</Text>
+            <View style={styles.modalActions}>
+              {!confirmModal?.hideCancel && (
+                <TouchableOpacity style={styles.modalCancelBtn} onPress={dismissConfirm}>
+                  <Text style={styles.modalCancelText}>Cancel</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={[styles.modalConfirmBtn, confirmModal?.danger && styles.modalDangerBtn]}
+                onPress={() => {
+                  dismissConfirm();
+                  confirmModal?.onConfirm();
+                }}
+              >
+                <Text style={styles.modalConfirmText}>{confirmModal?.confirmText}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -369,11 +404,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     fontSize: 16,
     color: '#111827',
-    ...Platform.select({
-      web: {
-        outlineStyle: 'none',
-      },
-    }),
   },
   passwordContainer: {
     flexDirection: 'row',
@@ -388,11 +418,6 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     color: '#111827',
-    ...Platform.select({
-      web: {
-        outlineStyle: 'none',
-      },
-    }),
   },
   hint: {
     fontSize: 12,
@@ -479,6 +504,69 @@ const styles = StyleSheet.create({
   nextButtonText: {
     fontSize: 16,
     fontWeight: '600',
+    color: '#fff',
+  },
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 24,
+    width: '100%',
+    maxWidth: 400,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 8,
+  },
+  modalTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 8,
+  },
+  modalMessage: {
+    fontSize: 14,
+    color: '#6b7280',
+    lineHeight: 22,
+    marginBottom: 20,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  modalCancelBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: '#f1f5f9',
+    alignItems: 'center',
+  },
+  modalCancelText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  modalConfirmBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: '#0e7490',
+    alignItems: 'center',
+  },
+  modalDangerBtn: {
+    backgroundColor: '#ef4444',
+  },
+  modalConfirmText: {
+    fontSize: 14,
+    fontWeight: '700',
     color: '#fff',
   },
 });

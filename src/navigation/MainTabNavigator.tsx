@@ -11,10 +11,23 @@ import { MainTabParamList } from './types';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
 
+import { useGetUnreadCountQuery } from '../services/notificationApi';
+import { ProfileNavigator } from './ProfileNavigator';
+
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
 export function MainTabNavigator() {
+    const insets = useSafeAreaInsets();
     const isLoggedIn = useSelector((state: RootState) => state.user.isLoggedIn);
+    const { data: unreadData } = useGetUnreadCountQuery(undefined, {
+        skip: !isLoggedIn,
+        pollingInterval: 30000, // Poll every 30 seconds for new notifications
+    });
+
+    const unreadCount = isLoggedIn ? (unreadData?.unreadCount || 0) : 0;
+
     return (
         <Tab.Navigator
             screenOptions={{
@@ -25,8 +38,8 @@ export function MainTabNavigator() {
                     borderTopWidth: 1,
                     borderTopColor: '#f3f4f6',
                     elevation: 0,
-                    height: 60,
-                    paddingBottom: 10,
+                    height: 60 + Math.max(insets.bottom, 0),
+                    paddingBottom: insets.bottom > 0 ? insets.bottom : 10,
                 },
             }}
         >
@@ -58,19 +71,23 @@ export function MainTabNavigator() {
                 name="Notification"
                 options={{
                     tabBarIcon: ({ color, size }) => <Bell size={size} color={color} />,
+                    tabBarBadge: unreadCount > 0 ? unreadCount : undefined,
+                    tabBarBadgeStyle: {
+                        backgroundColor: '#ef4444',
+                        fontSize: 10,
+                    },
                 }}
             >
                 {(props) => <NotificationScreen {...props} isLoggedIn={isLoggedIn} />}
             </Tab.Screen>
             <Tab.Screen
                 name="ProfileStack"
+                component={ProfileNavigator}
                 options={{
                     title: 'Profile',
                     tabBarIcon: ({ color, size }) => <User size={size} color={color} />,
                 }}
-            >
-                {(props) => <ProfileScreen {...props} />}
-            </Tab.Screen>
+            />
         </Tab.Navigator>
     );
 }

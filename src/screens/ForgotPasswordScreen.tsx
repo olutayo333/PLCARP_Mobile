@@ -1,18 +1,10 @@
 import React, { useState } from 'react';
-import {
-    StyleSheet,
-    View,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    Alert,
-    ActivityIndicator,
-} from 'react-native';
+import { StyleSheet, View, Text, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator, Modal } from 'react-native';
 import { Eye, EyeOff, ArrowLeft } from 'lucide-react-native';
 import { useSendPasswordVerificationCodeMutation, useResetPasswordMutation } from '../services/authApi';
+import CustomAlert from '../utils/CustomAlert';
+
+const Alert = CustomAlert;
 
 export function ForgotPasswordScreen({ onBackToLogin }: { onBackToLogin: () => void }) {
     const [step, setStep] = useState<1 | 2>(1);
@@ -27,16 +19,23 @@ export function ForgotPasswordScreen({ onBackToLogin }: { onBackToLogin: () => v
     const [sendCodeApi, { isLoading: isSendingCode }] = useSendPasswordVerificationCodeMutation();
     const [resetPasswordApi, { isLoading: isResettingPassword }] = useResetPasswordMutation();
 
+    // Cross-platform modal state
+    type ConfirmConfig = { title: string; message: string; confirmText: string; hideCancel?: boolean; danger?: boolean; onConfirm: () => void };
+    const [confirmModal, setConfirmModal] = useState<ConfirmConfig | null>(null);
+
+    const showConfirm = (cfg: ConfirmConfig) => setConfirmModal(cfg);
+    const dismissConfirm = () => setConfirmModal(null);
+
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
 
     const validateStep1 = () => {
         if (!email) {
-            Alert.alert('Error', 'Email address is required');
+            showConfirm({ title: 'Error', message: 'Email address is required', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
             return false;
         }
         if (!emailRegex.test(email)) {
-            Alert.alert('Error', 'Enter a valid email address');
+            showConfirm({ title: 'Error', message: 'Enter a valid email address', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
             return false;
         }
         return true;
@@ -44,23 +43,23 @@ export function ForgotPasswordScreen({ onBackToLogin }: { onBackToLogin: () => v
 
     const validateStep2 = () => {
         if (!token) {
-            Alert.alert('Error', 'Verification Code is required');
+            showConfirm({ title: 'Error', message: 'Verification Code is required', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
             return false;
         }
         if (!password) {
-            Alert.alert('Error', 'Password is required');
+            showConfirm({ title: 'Error', message: 'Password is required', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
             return false;
         }
         if (!passwordRegex.test(password)) {
-            Alert.alert('Error', 'Password must meet minimum requirements (8 chars, uppercase, lowercase, special character)');
+            showConfirm({ title: 'Error', message: 'Password must meet minimum requirements (8 chars, uppercase, lowercase, special character)', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
             return false;
         }
         if (!passwordConfirm) {
-            Alert.alert('Error', 'Confirm Password is required');
+            showConfirm({ title: 'Error', message: 'Confirm Password is required', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
             return false;
         }
         if (password !== passwordConfirm) {
-            Alert.alert('Error', 'Passwords do not match');
+            showConfirm({ title: 'Error', message: 'Passwords do not match', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
             return false;
         }
         return true;
@@ -70,27 +69,44 @@ export function ForgotPasswordScreen({ onBackToLogin }: { onBackToLogin: () => v
         if (!validateStep1()) return;
 
         try {
-            await sendCodeApi({ email }).unwrap();
-            Alert.alert('Success', 'Reset link sent to your email.');
-            setStep(2);
+          const response = await sendCodeApi({ email }).unwrap() as any;
+          if (response.status) {
+            showConfirm({ 
+              title: 'Success', 
+              message: response?.message || 'Verification code sent to your email.', 
+              confirmText: 'Next', 
+              hideCancel: true,
+              onConfirm: () => setStep(2) 
+            });
+          } else {
+            showConfirm({ title: 'Error', message: response?.message || 'Failed to send reset link.', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
+          }
         } catch (error: any) {
-            Alert.alert('Error', error?.data?.message || 'Failed to send reset link.');
+            showConfirm({ title: 'Error', message: error?.data?.message || 'Failed to send reset link.', confirmText: 'Retry', hideCancel: true, onConfirm: () => {} });
         }
     };
 
     const handleResetPassword = async () => {
         if (!validateStep2()) return;
-
         try {
-            await resetPasswordApi({
+            const response = await resetPasswordApi({
                 email,
                 token,
                 password,
-            }).unwrap();
-            Alert.alert('Success', 'Password has been reset successfully.');
-            onBackToLogin();
+            }).unwrap() as any;
+            if (response.status) {
+                showConfirm({ 
+                  title: 'Success', 
+                  message: response?.message || 'Password has been reset successfully.', 
+                  confirmText: 'Login Now', 
+                  hideCancel: true,
+                  onConfirm: () => onBackToLogin() 
+                });
+            } else {
+                showConfirm({ title: 'Error', message: response?.message || 'Failed to reset password.', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
+            }
         } catch (error: any) {
-            Alert.alert('Error', error?.data?.message || 'Failed to reset password.');
+            showConfirm({ title: 'Error', message: error?.data?.message || 'Failed to reset password.', confirmText: 'Retry', hideCancel: true, onConfirm: () => {} });
         }
     };
 
@@ -210,6 +226,37 @@ export function ForgotPasswordScreen({ onBackToLogin }: { onBackToLogin: () => v
                     </View>
                 )}
             </ScrollView>
+
+            {/* ── Cross-Platform CONFIRM Modal ── */}
+            <Modal
+                visible={!!confirmModal}
+                transparent
+                animationType="fade"
+                onRequestClose={dismissConfirm}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalCard}>
+                        <Text style={styles.modalTitle}>{confirmModal?.title}</Text>
+                        <Text style={styles.modalMessage}>{confirmModal?.message}</Text>
+                        <View style={styles.modalActions}>
+                            {!confirmModal?.hideCancel && (
+                                <TouchableOpacity style={styles.modalCancelBtn} onPress={dismissConfirm}>
+                                    <Text style={styles.modalCancelText}>Cancel</Text>
+                                </TouchableOpacity>
+                            )}
+                            <TouchableOpacity
+                                style={[styles.modalConfirmBtn, confirmModal?.danger && styles.modalDangerBtn]}
+                                onPress={() => {
+                                    dismissConfirm();
+                                    confirmModal?.onConfirm();
+                                }}
+                            >
+                                <Text style={styles.modalConfirmText}>{confirmModal?.confirmText}</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
         </KeyboardAvoidingView>
     );
 }
@@ -282,11 +329,6 @@ const styles = StyleSheet.create({
         flex: 1,
         fontSize: 16,
         color: '#111827',
-        ...Platform.select({
-            web: {
-                outlineStyle: 'none',
-            },
-        }),
     },
     hint: {
         fontSize: 12,
@@ -308,5 +350,68 @@ const styles = StyleSheet.create({
         color: '#fff',
         fontSize: 16,
         fontWeight: 'bold',
+    },
+    // Modal Styles
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.45)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 24,
+    },
+    modalCard: {
+        backgroundColor: '#fff',
+        borderRadius: 16,
+        padding: 24,
+        width: '100%',
+        maxWidth: 400,
+        shadowColor: '#000',
+        shadowOpacity: 0.15,
+        shadowRadius: 20,
+        shadowOffset: { width: 0, height: 8 },
+        elevation: 8,
+    },
+    modalTitle: {
+        fontSize: 17,
+        fontWeight: '700',
+        color: '#111827',
+        marginBottom: 8,
+    },
+    modalMessage: {
+        fontSize: 14,
+        color: '#6b7280',
+        lineHeight: 22,
+        marginBottom: 20,
+    },
+    modalActions: {
+        flexDirection: 'row',
+        gap: 12,
+    },
+    modalCancelBtn: {
+        flex: 1,
+        paddingVertical: 12,
+        borderRadius: 10,
+        backgroundColor: '#f1f5f9',
+        alignItems: 'center',
+    },
+    modalCancelText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#374151',
+    },
+    modalConfirmBtn: {
+        flex: 1,
+        paddingVertical: 12,
+        borderRadius: 10,
+        backgroundColor: '#0e7490',
+        alignItems: 'center',
+    },
+    modalDangerBtn: {
+        backgroundColor: '#ef4444',
+    },
+    modalConfirmText: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: '#fff',
     },
 });

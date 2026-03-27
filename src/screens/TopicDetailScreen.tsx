@@ -1,19 +1,14 @@
-import React, { useState, useEffect } from 'react';
-import {
-    StyleSheet,
-    View,
-    Text,
-    TouchableOpacity,
-    ScrollView,
-    TextInput,
-    KeyboardAvoidingView,
-    Platform,
-    ActivityIndicator,
-    Alert,
-    Share,
-    Image,
-    useWindowDimensions,
-} from 'react-native';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useSelector } from 'react-redux';
+import { RootState } from '../store';
+
+import CustomAlert from '../utils/CustomAlert';
+const Alert = CustomAlert;
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, Share, Image, useWindowDimensions } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import { StackNavigationProp } from '@react-navigation/stack';
+import { RootStackParamList } from '../navigation/types';
+
 import {
     ArrowLeft,
     Share2,
@@ -21,12 +16,17 @@ import {
     MessageCircle,
     Flag,
     Send,
+    Trash2,
 } from 'lucide-react-native';
 import {
     useGetTopicByIdQuery,
+    useGetMentionsQuery,
     useAddCommentMutation,
     useToggleTopicLikeMutation,
+    useToggleCommentLikeMutation,
     useReportTopicMutation,
+    useDeleteTopicMutation,
+    useSearchCommunityMembersQuery,
 } from '../services/communityApi';
 import { Skeleton } from '../components/common/Skeleton';
 
@@ -38,13 +38,48 @@ interface TopicDetailScreenProps {
 
 export function TopicDetailScreen({ communityId, topicId, onBack }: TopicDetailScreenProps) {
     const { height: screenHeight } = useWindowDimensions();
+    const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
+    const isLoggedIn = useSelector((state: RootState) => state.user.isLoggedIn);
+    const user = useSelector((state: RootState) => state.user.user);
     const { data: topic, isLoading } = useGetTopicByIdQuery({ communityId, topicId });
+    const { data: mentions } = useGetMentionsQuery(undefined, { skip: !isLoggedIn });
+
     const [addComment] = useAddCommentMutation();
     const [toggleLike] = useToggleTopicLikeMutation();
+    const [toggleCommentLike] = useToggleCommentLikeMutation();
+    const [deleteTopic] = useDeleteTopicMutation();
     const [reportTopic] = useReportTopicMutation();
     const [commentText, setCommentText] = useState('');
     const [isLiked, setIsLiked] = useState(false);
     const [likes, setLikes] = useState(0);
+
+    // Mention States
+    const [mentionQuery, setMentionQuery] = useState('');
+    const [showMentions, setShowMentions] = useState(false);
+    const [debouncedMentionQuery, setDebouncedMentionQuery] = useState('');
+    const [mentionedUsers, setMentionedUsers] = useState<{ id: string; fullName: string }[]>([]);
+
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setDebouncedMentionQuery(mentionQuery);
+        }, 600); // Faster debounce as requested by performance
+        return () => clearTimeout(timer);
+    }, [mentionQuery]);
+
+    const { data: memberResults } = useSearchCommunityMembersQuery(
+        { communityId, query: debouncedMentionQuery },
+        { skip: !showMentions || !debouncedMentionQuery }
+    );
+
+    // Filter out already-selected users from the suggestions using useMemo for reliability
+    const filteredResults = useMemo(() => {
+        return (memberResults || []).filter(
+            (m) => !mentionedUsers.some((u) => u.id === m.id)
+        );
+    }, [memberResults, mentionedUsers]);
+
+
+    const isAuthor = user?.id === topic?.author?.id;
 
     useEffect(() => {
         if (topic) {
@@ -53,31 +88,99 @@ export function TopicDetailScreen({ communityId, topicId, onBack }: TopicDetailS
         }
     }, [topic]);
 
+    const handleGuestAction = (action: string) => {
+        Alert.alert(
+            'Participation Required',
+            `Please login or register to ${action} on this topic.`,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Login',
+                    onPress: () => navigation.navigate('Login')
+                }
+            ]
+        );
+    };
+
     const handlePostComment = async () => {
+        if (!isLoggedIn) {
+            handleGuestAction('post a comment');
+            return;
+        }
         if (!commentText.trim()) return;
+
         try {
-            await addComment({
+            const response = await addComment({
                 communityId,
                 topicId,
-                data: { body: commentText }
+                data: {
+                    body: commentText,
+                    mentionedUserIds: mentionedUsers.length > 0 ? mentionedUsers.map(u => u.id) : undefined
+                }
             }).unwrap();
-            setCommentText('');
-            Alert.alert('Success', 'Comment posted');
-        } catch (error) {
-            Alert.alert('Error', 'Failed to post comment');
+            if (response?.status) {
+                setCommentText('');
+                setMentionedUsers([]);
+                Alert.alert('Success', response?.message || 'Comment posted');
+            }
+            else {
+                Alert.alert('Error', response?.message || 'Failed to post comment');
+            }
+        } catch (error: any) {
+            const serverError = error?.data?.message || 'Failed to post comment';
+            Alert.alert('Error', serverError);
         }
     };
 
+    const handleInputChange = (text: string) => {
+        setCommentText(text);
+        const match = text.match(/@(\w*)$/);
+        if (match) {
+            setMentionQuery(match[1]);
+            setShowMentions(true);
+        } else {
+            setShowMentions(false);
+            setMentionQuery('');
+        }
+    };
+
+    const handleSelectMention = (member: { id: string; fullName: string }) => {
+        // Strip the @trigger from the text (keep comment body clean)
+        const newText = commentText.replace(/@\w*$/, '');
+        setCommentText(newText);
+        setShowMentions(false);
+        setMentionQuery('');
+        setMentionedUsers(prev => [...prev, member]);
+    };
+
+    const handleRemoveMention = (userId: string) => {
+        setMentionedUsers(prev => prev.filter(u => u.id !== userId));
+    };
+
+
     const handleLike = async () => {
+        if (!isLoggedIn) {
+            handleGuestAction('like');
+            return;
+        }
         try {
+
             const newLiked = !isLiked;
             setIsLiked(newLiked);
             setLikes(prev => newLiked ? prev + 1 : prev - 1);
-            await toggleLike({ communityId, topicId }).unwrap();
-        } catch (error) {
+            const response = await toggleLike({ communityId, topicId }).unwrap();
+
+            if (!response?.status) {
+                // Revert state if server failed
+                setIsLiked(topic?.hasLiked || false);
+                setLikes(topic?.likeCount || 0);
+                Alert.alert('Error', response?.message || 'Failed to like topic');
+            }
+        } catch (error: any) {
             setIsLiked(topic?.hasLiked || false);
             setLikes(topic?.likeCount || 0);
-            Alert.alert('Error', 'Failed to like topic');
+            const serverError = error?.data?.message || 'Failed to like topic';
+            Alert.alert('Error', serverError);
         }
     };
 
@@ -92,10 +195,15 @@ export function TopicDetailScreen({ communityId, topicId, onBack }: TopicDetailS
                     onPress: async (reason) => {
                         if (!reason) return;
                         try {
-                            await reportTopic({ communityId, topicId, data: { reason } }).unwrap();
-                            Alert.alert('Success', 'Topic reported successfully');
-                        } catch (error) {
-                            Alert.alert('Error', 'Failed to report topic');
+                            const response = await reportTopic({ communityId, topicId, data: { reason } }).unwrap();
+                            if (response?.status) {
+                                Alert.alert('Success', response.message || 'Topic reported successfully');
+                            } else {
+                                Alert.alert('Error', response?.message || 'Failed to report topic');
+                            }
+                        } catch (error: any) {
+                            const serverError = error?.data?.message || 'Failed to report topic';
+                            Alert.alert('Error', serverError);
                         }
                     }
                 }
@@ -113,6 +221,45 @@ export function TopicDetailScreen({ communityId, topicId, onBack }: TopicDetailS
         } catch (error) {
             Alert.alert('Error', 'Failed to share topic');
         }
+    };
+
+    const handleLikeComment = async (commentId: string) => {
+        try {
+            const response = await toggleCommentLike({ communityId, topicId, commentId }).unwrap();
+            if (!response?.status) {
+                Alert.alert('Error', response?.message || 'Failed to like comment');
+            }
+        } catch (error: any) {
+            const serverError = error?.data?.message || 'Failed to like comment';
+            Alert.alert('Error', serverError);
+        }
+    };
+
+    const handleDeleteTopic = async () => {
+        Alert.alert(
+            'Delete Topic',
+            'Are you sure you want to delete this topic? This action cannot be undone.',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Delete',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            const response = await deleteTopic({ communityId, topicId }).unwrap();
+                            if (response?.status) {
+                                onBack(); // Navigate back on success
+                            } else {
+                                Alert.alert('Error', response?.message || 'Failed to delete topic');
+                            }
+                        } catch (error: any) {
+                            const serverError = error?.data?.message || 'Failed to delete topic';
+                            Alert.alert('Error', serverError);
+                        }
+                    }
+                }
+            ]
+        );
     };
 
     const DetailSkeleton = () => (
@@ -159,6 +306,23 @@ export function TopicDetailScreen({ communityId, topicId, onBack }: TopicDetailS
             </ScrollView>
         </View>
     );
+    const renderRichText = (text: string) => {
+        if (!text) return null;
+        // Simple regex to match @Name patterns. 
+        // We match @ followed by word characters and spaces, but avoid trailing spaces/punctuation
+        const parts = text.split(/(@[A-Za-z0-9_]+(?:\s[A-Za-z0-9_]+)*)/g);
+
+        return (
+            <Text>
+                {parts.map((part, index) => {
+                    if (part.startsWith('@')) {
+                        return <Text key={index} style={styles.mentionHighlight}>{part}</Text>;
+                    }
+                    return part;
+                })}
+            </Text>
+        );
+    };
 
     if (isLoading) return <DetailSkeleton />;
     if (!topic) return <View style={styles.centered}><Text>Topic not found</Text></View>;
@@ -170,9 +334,16 @@ export function TopicDetailScreen({ communityId, topicId, onBack }: TopicDetailS
                     <ArrowLeft size={24} color="#374151" />
                 </TouchableOpacity>
                 <Text style={styles.detailHeaderTitle} numberOfLines={1}>{topic.title}</Text>
-                <TouchableOpacity onPress={handleShare}>
-                    <Share2 size={24} color="#374151" />
-                </TouchableOpacity>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
+                    {isAuthor && (
+                        <TouchableOpacity onPress={handleDeleteTopic}>
+                            <Trash2 size={22} color="#ef4444" />
+                        </TouchableOpacity>
+                    )}
+                    <TouchableOpacity onPress={handleShare}>
+                        <Share2 size={24} color="#374151" />
+                    </TouchableOpacity>
+                </View>
             </View>
 
             <ScrollView
@@ -217,60 +388,123 @@ export function TopicDetailScreen({ communityId, topicId, onBack }: TopicDetailS
                     </View>
 
                     <View style={styles.topicBodyContainer}>
-                        <Text style={styles.topicBodyText}>{topic.body}</Text>
+                        <Text style={styles.topicBodyText}>{renderRichText(topic.body)}</Text>
                     </View>
+
                 </View>
 
                 <View style={styles.commentsSection}>
                     <Text style={styles.commentsTitle}>Participation</Text>
-                    {topic.comments.map((comment) => (
-                        <View key={comment.id} style={styles.commentCard}>
-                            <View style={styles.commentAuthorRow}>
-                                <View style={styles.avatarTiny}>
-                                    {comment.author.avatarUrl ? (
-                                        <Image
-                                            source={{ uri: comment.author.avatarUrl }}
-                                            style={styles.avatarImageTiny}
+                    {topic.comments.map((comment) => {
+                        const isMentioned = user && (
+                            comment.mentionedUserId === user.id ||
+                            comment.mentionedUserIds?.includes(user.id) ||
+                            comment.body.toLowerCase().includes(`@${user?.fullName?.toLowerCase()}`) ||
+                            mentions?.some(m => m.commentId === comment.id)
+                        );
+
+                        return (
+                            <View key={comment.id} style={[styles.commentCard, isMentioned && styles.commentMentioned]}>
+                                <View style={styles.commentAuthorRow}>
+
+                                    <View style={styles.avatarTiny}>
+                                        {comment.author.avatarUrl ? (
+                                            <Image
+                                                source={{ uri: comment.author.avatarUrl }}
+                                                style={styles.avatarImageTiny}
+                                            />
+                                        ) : (
+                                            <Text style={styles.avatarTextTiny}>{comment.author.fullName.charAt(0)}</Text>
+                                        )}
+                                    </View>
+                                    <View style={{ flex: 1 }}>
+                                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <Text style={styles.commentAuthor}>{comment.author.fullName}</Text>
+                                            {isMentioned && (
+                                                <View style={styles.mentionBadge}>
+                                                    <Text style={styles.mentionBadgeText}>Mentioned</Text>
+                                                </View>
+                                            )}
+                                        </View>
+                                        <Text style={styles.commentDate}>{new Date(comment.createdAt).toLocaleDateString()}</Text>
+                                    </View>
+                                </View>
+                                <Text style={styles.commentBody}>{renderRichText(comment.body)}</Text>
+                                <View style={styles.commentActions}>
+
+                                    <TouchableOpacity
+                                        style={styles.commentAction}
+                                        onPress={() => handleLikeComment(comment.id)}
+                                    >
+                                        <Heart
+                                            size={14}
+                                            color={comment.hasLiked ? "#ef4444" : "#6b7280"}
+                                            fill={comment.hasLiked ? "#ef4444" : "transparent"}
                                         />
-                                    ) : (
-                                        <Text style={styles.avatarTextTiny}>{comment.author.fullName.charAt(0)}</Text>
-                                    )}
-                                </View>
-                                <View style={{ marginLeft: 8 }}>
-                                    <Text style={styles.commentAuthor}>{comment.author.fullName}</Text>
-                                    <Text style={styles.commentDate}>{new Date(topic.createdAt).toLocaleDateString()}</Text>
+                                        <Text style={[styles.commentActionText, comment.hasLiked && { color: '#ef4444' }]}>
+                                            {comment.likeCount}
+                                        </Text>
+                                    </TouchableOpacity>
                                 </View>
                             </View>
-                            <Text style={styles.commentBody}>{comment.body}</Text>
-                            <View style={styles.commentActions}>
-                                <TouchableOpacity style={styles.commentAction}>
-                                    <Heart size={14} color="#6b7280" />
-                                    <Text style={styles.commentActionText}>{comment.likeCount}</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity style={styles.commentAction}>
-                                    <Text style={styles.commentActionText}>Reply</Text>
-                                </TouchableOpacity>
-                            </View>
-                        </View>
-                    ))}
+                        );
+                    })}
+
                 </View>
+
             </ScrollView>
 
             <KeyboardAvoidingView
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
             >
-                <View style={styles.commentInputContainer}>
-                    <TextInput
-                        style={styles.commentInput}
-                        placeholder="Write a comment..."
-                        value={commentText}
-                        onChangeText={setCommentText}
-                        multiline
-                    />
-                    <TouchableOpacity style={styles.sendButton} onPress={handlePostComment}>
-                        <Send size={20} color="#fff" />
-                    </TouchableOpacity>
+                <View style={styles.commentInputWrapper}>
+                    {/* Mention suggestions dropdown */}
+                    {showMentions && filteredResults.length > 0 && (
+                        <View style={styles.mentionsOverlay}>
+                            {filteredResults.map((member) => (
+                                <TouchableOpacity
+                                    key={member.id}
+                                    style={styles.mentionItem}
+                                    onPress={() => handleSelectMention(member)}
+                                >
+                                    <View style={styles.mentionAvatar}>
+                                        <Text style={styles.mentionAvatarText}>{member.fullName.charAt(0)}</Text>
+                                    </View>
+                                    <Text style={styles.mentionName}>{member.fullName}</Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                    )}
+                    {/* Mention chips strip */}
+                    {mentionedUsers.length > 0 && (
+                        <View style={styles.mentionChipsRow}>
+                            <Text style={styles.mentionChipsLabel}>Mentions:</Text>
+                            {mentionedUsers.map((user) => (
+                                <View key={user.id} style={styles.mentionChip}>
+                                    <Text style={styles.mentionChipText}>@{user.fullName}</Text>
+                                    <TouchableOpacity
+                                        onPress={() => handleRemoveMention(user.id)}
+                                        hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                                    >
+                                        <Text style={styles.mentionChipRemove}>✕</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            ))}
+                        </View>
+                    )}
+                    <View style={styles.commentInputContainer}>
+                        <TextInput
+                            style={styles.commentInput}
+                            placeholder="Write a comment... (type @ to mention)"
+                            value={commentText}
+                            onChangeText={handleInputChange}
+                            multiline
+                        />
+                        <TouchableOpacity style={styles.sendButton} onPress={handlePostComment}>
+                            <Send size={20} color="#fff" />
+                        </TouchableOpacity>
+                    </View>
                 </View>
             </KeyboardAvoidingView>
         </View>
@@ -449,14 +683,81 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: '#6b7280',
     },
+    commentInputWrapper: {
+        backgroundColor: '#fff',
+        borderTopWidth: 1,
+        borderTopColor: '#f3f4f6',
+    },
+    mentionChipsRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        paddingHorizontal: 16,
+        paddingTop: 8,
+        gap: 8,
+        alignItems: 'center',
+    },
+    mentionChipsLabel: {
+        fontSize: 12,
+        color: '#6b7280',
+        marginRight: 4,
+    },
+    mentionChip: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#f3f4f6',
+        borderRadius: 16,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        gap: 6,
+    },
+    mentionChipText: {
+        fontSize: 12,
+        color: '#0e7490',
+        fontWeight: 'bold',
+    },
+    mentionChipRemove: {
+        fontSize: 14,
+        color: '#ef4444',
+        fontWeight: 'bold',
+    },
     commentInputContainer: {
         flexDirection: 'row',
         padding: 16,
-        borderTopWidth: 1,
-        borderTopColor: '#f3f4f6',
         alignItems: 'center',
         gap: 12,
         backgroundColor: '#fff',
+    },
+    mentionsOverlay: {
+        backgroundColor: '#fff',
+        borderTopWidth: 1,
+        borderTopColor: '#f3f4f6',
+        maxHeight: 200,
+    },
+    mentionItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: '#f9fafb',
+        gap: 12,
+    },
+    mentionAvatar: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        backgroundColor: '#0e7490',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    mentionAvatarText: {
+        color: '#fff',
+        fontSize: 12,
+        fontWeight: 'bold',
+    },
+    mentionName: {
+        fontSize: 14,
+        color: '#374151',
+        fontWeight: '500',
     },
     commentInput: {
         flex: 1,
@@ -481,4 +782,28 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
     },
+    mentionHighlight: {
+        color: '#4f46e5', // Brand indigo for highlight
+        fontWeight: '700',
+    },
+    commentMentioned: {
+        borderColor: '#4f46e5',
+        borderLeftWidth: 4,
+        backgroundColor: '#f5f7ff',
+    },
+    mentionBadge: {
+        backgroundColor: '#e0e7ff',
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        borderRadius: 4,
+    },
+    mentionBadgeText: {
+        fontSize: 10,
+        color: '#4f46e5',
+        fontWeight: 'bold',
+        textTransform: 'uppercase',
+    },
 });
+
+
+

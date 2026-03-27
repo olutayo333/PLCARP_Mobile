@@ -1,21 +1,14 @@
 import React, { useState } from 'react';
-import {
-  StyleSheet,
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  Alert,
-  ActivityIndicator,
-} from 'react-native';
+import { StyleSheet, View, Text, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator, Modal } from 'react-native';
 import { Eye, EyeOff, Check, ArrowRight } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLoginMutation } from '../services/authApi';
 import { useDispatch } from 'react-redux';
 import { setUser } from '../store/slices/userSlice';
+import { showToast } from '../store/slices/uiSlice';
+import CustomAlert from '../utils/CustomAlert';
+
+const Alert = CustomAlert;
 
 export function LoginScreen({ onLoginSuccess, onRegisterPress, onVisitorPress, onForgotPasswordPress }: {
   onLoginSuccess: () => void;
@@ -31,26 +24,38 @@ export function LoginScreen({ onLoginSuccess, onRegisterPress, onVisitorPress, o
 
   const [login, { isLoading }] = useLoginMutation();
 
+  // Cross-platform modal state
+  type ConfirmConfig = { title: string; message: string; confirmText: string; hideCancel?: boolean; danger?: boolean; onConfirm: () => void };
+  const [confirmModal, setConfirmModal] = useState<ConfirmConfig | null>(null);
+
+  const showConfirm = (cfg: ConfirmConfig) => setConfirmModal(cfg);
+  const dismissConfirm = () => setConfirmModal(null);
+
   const handleLogin = async () => {
     if (!email || !password) {
-      Alert.alert('Error', 'Please fill in all fields');
+      showConfirm({ title: 'Error', message: 'Please fill in all fields', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
       return;
     }
-
     try {
-      const result = await login({ email, password }).unwrap();
-      if (result.data?.token) {
-        await AsyncStorage.setItem('token', result.data.token);
-        if (result.data.user) {
-          await AsyncStorage.setItem('user', JSON.stringify(result.data.user));
-          dispatch(setUser(result.data.user));
+      const result = await login({ email, password }).unwrap() as any;
+      if (result.status && (result.token || result.data?.token)) {
+        const token = result.token || result.data?.token;
+        const user = result.user || result.data?.user;
+        
+        await AsyncStorage.setItem('token', token);
+        if (user) {
+          await AsyncStorage.setItem('user', JSON.stringify(user));
+          dispatch(setUser(user));
         }
+        dispatch(showToast({ message: 'Login successful! Welcome back.', type: 'success' }));
         onLoginSuccess();
       } else {
-        Alert.alert('Error', 'Invalid login response');
+        const errorMsg = result?.message || result?.data?.message || 'Invalid login response';
+        showConfirm({ title: 'Login Error', message: errorMsg, confirmText: 'Retry', hideCancel: true, onConfirm: () => {} });
       }
     } catch (error: any) {
-      Alert.alert('Login Failed', error.data?.message || 'Something went wrong');
+      const serverMsg = error.data?.message || error.message || 'Something went wrong';
+      showConfirm({ title: 'Login Failed', message: serverMsg, confirmText: 'Try Again', hideCancel: true, onConfirm: () => {} });
     }
   };
 
@@ -140,6 +145,37 @@ export function LoginScreen({ onLoginSuccess, onRegisterPress, onVisitorPress, o
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {/* ── Cross-Platform CONFIRM Modal ── */}
+      <Modal
+        visible={!!confirmModal}
+        transparent
+        animationType="fade"
+        onRequestClose={dismissConfirm}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>{confirmModal?.title}</Text>
+            <Text style={styles.modalMessage}>{confirmModal?.message}</Text>
+            <View style={styles.modalActions}>
+              {!confirmModal?.hideCancel && (
+                <TouchableOpacity style={styles.modalCancelBtn} onPress={dismissConfirm}>
+                  <Text style={styles.modalCancelText}>Cancel</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={[styles.modalConfirmBtn, confirmModal?.danger && styles.modalDangerBtn]}
+                onPress={() => {
+                  dismissConfirm();
+                  confirmModal?.onConfirm();
+                }}
+              >
+                <Text style={styles.modalConfirmText}>{confirmModal?.confirmText}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -300,5 +336,68 @@ const styles = StyleSheet.create({
     color: '#0e7490',
     fontSize: 16,
     fontWeight: '600',
+  },
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 24,
+    width: '100%',
+    maxWidth: 400,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 8,
+  },
+  modalTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 8,
+  },
+  modalMessage: {
+    fontSize: 14,
+    color: '#6b7280',
+    lineHeight: 22,
+    marginBottom: 20,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  modalCancelBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: '#f1f5f9',
+    alignItems: 'center',
+  },
+  modalCancelText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  modalConfirmBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: '#0e7490',
+    alignItems: 'center',
+  },
+  modalDangerBtn: {
+    backgroundColor: '#ef4444',
+  },
+  modalConfirmText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#fff',
   },
 });

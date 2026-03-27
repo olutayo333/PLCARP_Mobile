@@ -1,18 +1,19 @@
 import React, { useState } from 'react';
-import {
-  StyleSheet,
-  View,
-  Text,
-  TouchableOpacity,
-  Alert,
-  Share,
-  Image,
-} from 'react-native';
+
+import CustomAlert from '../utils/CustomAlert';
+const Alert = CustomAlert;
+import { StyleSheet, View, Text, TouchableOpacity, Share, Image } from 'react-native';;
 import { Heart, MessageCircle, Share2, Bell, Eye } from 'lucide-react-native';
 import {
   useToggleTopicLikeMutation,
   CommunityTopicDetail
 } from '../services/communityApi';
+import { useDispatch } from 'react-redux';
+import { useNavigation } from '@react-navigation/native';
+import { StackNavigationProp } from '@react-navigation/stack';
+import { RootStackParamList } from '../navigation/types';
+import { showToast } from '@/store/slices/uiSlice';
+
 
 interface TopicCardProps {
   topic: CommunityTopicDetail;
@@ -21,28 +22,56 @@ interface TopicCardProps {
 }
 
 export function TopicCard({ topic, readOnly, onTopicPress }: TopicCardProps) {
+  const dispatch = useDispatch();
+  const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
+
   const [toggleLike] = useToggleTopicLikeMutation();
+
+  const renderRichText = (text: string) => {
+    if (!text) return null;
+    const parts = text.split(/(@[A-Za-z0-9_]+(?:\s[A-Za-z0-9_]+)*)/g);
+    return (
+      <Text>
+        {parts.map((part, index) => {
+          if (part.startsWith('@')) {
+            return <Text key={index} style={styles.mentionHighlight}>{part}</Text>;
+          }
+          return part;
+        })}
+      </Text>
+    );
+  };
+
   const [isLiked, setIsLiked] = useState(topic.hasLiked || false);
   const [likes, setLikes] = useState(topic.likeCount || 0);
 
   const handleLike = async () => {
     if (readOnly) {
-      Alert.alert('Authentication Required', 'Please log in to like topics');
+      navigation.navigate('Login');
       return;
     }
+
     try {
       const newLiked = !isLiked;
       setIsLiked(newLiked);
       setLikes(prev => newLiked ? prev + 1 : prev - 1);
 
-      await toggleLike({
+      const response = await toggleLike({
         communityId: topic.communityId,
         topicId: topic.id
       }).unwrap();
-    } catch (error) {
+
+      if (!response?.status) {
+        // Revert state if server failed
+        setIsLiked(topic.hasLiked || false);
+        setLikes(topic.likeCount || 0);
+        dispatch(showToast({ message: response?.message || 'Failed to like topic', type: 'error' }));
+      }
+    } catch (error: any) {
       setIsLiked(topic.hasLiked || false);
       setLikes(topic.likeCount || 0);
-      Alert.alert('Error', 'Failed to like topic');
+      const serverError = error?.data?.message || 'Failed to like topic';
+      dispatch(showToast({ message: serverError, type: 'error' }));
     }
   };
 
@@ -53,7 +82,7 @@ export function TopicCard({ topic, readOnly, onTopicPress }: TopicCardProps) {
         title: topic.title,
       });
     } catch (error) {
-      Alert.alert('Error', 'Failed to share topic');
+      dispatch(showToast({ message: 'Failed to share topic', type: 'error' }));
     }
   };
 
@@ -76,7 +105,8 @@ export function TopicCard({ topic, readOnly, onTopicPress }: TopicCardProps) {
           )}
         </View>
         <View style={styles.topicCardInfo}>
-          <Text style={styles.topicCardTitle} numberOfLines={3}>{topic.title}</Text>
+          <Text style={styles.topicCardTitle} numberOfLines={3}>{renderRichText(topic.title)}</Text>
+
           <Text style={styles.topicCardMeta} numberOfLines={1}>
             by <Text style={!readOnly && styles.authorNameLink}>{topic.author.fullName}</Text> • {new Date(topic.createdAt).toLocaleDateString()}
           </Text>
@@ -92,9 +122,9 @@ export function TopicCard({ topic, readOnly, onTopicPress }: TopicCardProps) {
           <TouchableOpacity style={styles.iconAction} onPress={handleShare}>
             <Share2 size={16} color="#9ca3af" />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.iconAction}>
+          {/* <TouchableOpacity style={styles.iconAction}>
             <Bell size={16} color="#9ca3af" />
-          </TouchableOpacity>
+          </TouchableOpacity> */}
         </View>
         <View style={styles.rightActions}>
           <View style={styles.statItemRow}>
@@ -194,4 +224,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#6b7280',
   },
+  mentionHighlight: {
+    color: '#4f46e5',
+    fontWeight: '700',
+  },
 });
+

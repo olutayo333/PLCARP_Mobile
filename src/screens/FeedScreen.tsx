@@ -1,16 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import {
-    StyleSheet,
-    View,
-    Text,
-    TouchableOpacity,
-    ScrollView,
-    FlatList,
-    ActivityIndicator,
-    TextInput,
-    Platform,
-    Alert,
-} from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView, FlatList, ActivityIndicator, TextInput, Platform, Modal } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
     Plus,
     AtSign,
@@ -23,7 +13,10 @@ import {
     ChevronLeft,
     ChevronRight,
     ShieldCheck,
+    ChevronDown,
+    X,
 } from 'lucide-react-native';
+
 import {
     useGetGlobalTopicsQuery,
     useGetCommunitiesQuery,
@@ -45,6 +38,10 @@ import { ActivityCard } from '../components/ActivityCard';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../navigation/types';
+import { showToast } from '../store/slices/uiSlice';
+import CustomAlert from '../utils/CustomAlert';
+
+const Alert = CustomAlert;
 
 const categoryFilters = [
     { name: 'Policy Advocacy', icon: Check, color: '#2563eb', bg: '#eff6ff' },
@@ -54,10 +51,6 @@ const categoryFilters = [
     { name: 'Capacity Building', icon: Check, color: '#d97706', bg: '#fffbeb' },
     { name: 'Grant Writing', icon: Check, color: '#4f46e5', bg: '#eef2ff' },
 ];
-
-interface FeedScreenProps {
-    isLoggedIn: boolean;
-}
 
 const ITEMS_PER_PAGE = 10;
 
@@ -87,75 +80,49 @@ function GuestWelcomeBanner({ navigation }: { navigation: any }) {
 }
 
 export function FeedScreen({ route }: any) {
+    const insets = useSafeAreaInsets();
     const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
     const [selectedCommunityId, setSelectedCommunityId] = useState<string | null>(null);
     const [activeSubTab, setActiveSubTab] = useState('topics');
 
-    // Handle deep linking to specific sub-tabs
     useEffect(() => {
         if (route?.params?.initialSubTab) {
             setActiveSubTab(route.params.initialSubTab);
-            // Clear parameter to prevent reset on re-renders
             navigation.setParams({ initialSubTab: undefined } as any);
         }
     }, [route?.params?.initialSubTab]);
+
     const [activeFilter, setActiveFilter] = useState('recents');
     const [categorySearch, setCategorySearch] = useState('');
     const dispatch = useDispatch();
-    const user = useSelector((state: RootState) => state.user.user);
     const isLoggedIn = useSelector((state: RootState) => state.user.isLoggedIn);
 
-    const TopicSkeleton = () => (
-        <View style={{ backgroundColor: '#fff', padding: 16, borderRadius: 16, marginBottom: 12, borderWidth: 1, borderColor: '#f1f5f9' }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
-                <Skeleton width={40} height={40} borderRadius={20} />
-                <View style={{ marginLeft: 12, flex: 1 }}>
-                    <Skeleton width="40%" height={14} style={{ marginBottom: 4 }} />
-                    <Skeleton width="25%" height={10} />
-                </View>
-                <Skeleton width={60} height={20} borderRadius={10} />
-            </View>
-            <Skeleton width="90%" height={18} style={{ marginBottom: 12 }} />
-            <Skeleton width="100%" height={14} style={{ marginBottom: 8 }} />
-            <Skeleton width="70%" height={14} style={{ marginBottom: 16 }} />
-            <View style={{ flexDirection: 'row', gap: 16 }}>
-                <Skeleton width={40} height={12} />
-                <Skeleton width={40} height={12} />
-            </View>
-        </View>
-    );
+    // Cross-platform modal state
+    type ConfirmConfig = { title: string; message: string; confirmText: string; danger?: boolean; onConfirm: () => void };
+    const [confirmModal, setConfirmModal] = useState<ConfirmConfig | null>(null);
 
-    const CommunitySkeleton = () => (
-        <View style={{ backgroundColor: '#fff', padding: 16, borderRadius: 16, marginBottom: 12, borderWidth: 1, borderColor: '#f1f5f9' }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Skeleton width={60} height={60} borderRadius={12} />
-                <View style={{ marginLeft: 16, flex: 1 }}>
-                    <Skeleton width="20%" height={10} style={{ marginBottom: 4 }} />
-                    <Skeleton width="60%" height={18} style={{ marginBottom: 8 }} />
-                    <Skeleton width="40%" height={12} />
-                </View>
-                <Skeleton width={24} height={24} borderRadius={12} />
-            </View>
-        </View>
-    );
-
-    const FeedSkeleton = () => (
-        <View style={{ padding: 16 }}>
-            {activeSubTab === 'communities'
-                ? [1, 2, 3, 4, 5].map(i => <CommunitySkeleton key={i} />)
-                : [1, 2, 3, 4].map(i => <TopicSkeleton key={i} />)
-            }
-        </View>
-    );
+    const showConfirm = (cfg: ConfirmConfig) => setConfirmModal(cfg);
+    const dismissConfirm = () => setConfirmModal(null);
 
     const [searchQuery, setSearchQuery] = useState('');
     const [effectiveSearch, setEffectiveSearch] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
+    const [isCommunityPickerVisible, setIsCommunityPickerVisible] = useState(false);
+    const [communitySearch, setCommunitySearch] = useState('');
+    const [debouncedCommunitySearch, setDebouncedCommunitySearch] = useState('');
+
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setDebouncedCommunitySearch(communitySearch);
+        }, 1000);
+        return () => clearTimeout(timer);
+    }, [communitySearch]);
+
 
     useEffect(() => {
         const timer = setTimeout(() => {
             setEffectiveSearch(searchQuery);
-            setCurrentPage(1); // Reset to page 1 on new search
+            setCurrentPage(1);
         }, 1000);
         return () => clearTimeout(timer);
     }, [searchQuery]);
@@ -168,7 +135,7 @@ export function FeedScreen({ route }: any) {
     }, [activeSubTab, selectedCommunityId]);
 
     useEffect(() => {
-        setCurrentPage(1); // Reset to page 1 when filter changes
+        setCurrentPage(1);
     }, [activeFilter]);
 
     const combinedSearch = useMemo(() => {
@@ -180,42 +147,48 @@ export function FeedScreen({ route }: any) {
 
     const handleCommunityAction = async (community: any) => {
         if (!isLoggedIn) {
-            Alert.alert(
-                'Join Community',
-                'Please register and login to join this community.'
-            );
+            showConfirm({
+                title: 'Join Community',
+                message: 'Please register and login to join this community.',
+                confirmText: 'Login',
+                onConfirm: () => navigation.navigate('Login')
+            });
             return;
         }
 
         try {
             if (community.joined) {
-                Alert.alert(
-                    'Leave Community',
-                    `Are you sure you want to leave ${community.name}?`,
-                    [
-                        { text: 'Cancel', style: 'cancel' },
-                        {
-                            text: 'Leave',
-                            style: 'destructive',
-                            onPress: async () => {
-                                try {
-                                    await unsubscribe(community.id).unwrap();
-                                } catch (err: any) {
-                                    Alert.alert('Error', err?.data?.message || 'Failed to leave community');
-                                }
-                            }
+                showConfirm({
+                    title: 'Leave Community',
+                    message: `Are you sure you want to leave ${community.name}?`,
+                    confirmText: 'Leave',
+                    danger: true,
+                    onConfirm: async () => {
+                        try {
+                            const response = await unsubscribe(community.id).unwrap() as any;
+                            dispatch(showToast({
+                                message: response?.message || 'Left community successfully',
+                                type: response?.status ? 'success' : 'error'
+                            }));
+                        } catch (err: any) {
+                            dispatch(showToast({ message: err?.data?.message || 'Failed to leave community', type: 'error' }));
                         }
-                    ]
-                );
+                    }
+                });
             } else {
-                await subscribe(community.id).unwrap();
+                const response = await subscribe(community.id).unwrap() as any;
+                dispatch(showToast({
+                    message: response?.message || 'Joined community successfully',
+                    type: response?.status ? 'success' : 'error'
+                }));
             }
         } catch (err: any) {
-            Alert.alert('Error', err?.data?.message || 'Failed to update subscription');
+            const serverError = err?.data?.message || 'Failed to update subscription';
+            dispatch(showToast({ message: serverError, type: 'error' }));
         }
     };
 
-    const { data: communitiesData, isLoading: isLoadingCommunities } = useGetCommunitiesQuery({});
+    const { data: communitiesData } = useGetCommunitiesQuery({});
 
     const {
         data: globalTopicsData,
@@ -265,13 +238,26 @@ export function FeedScreen({ route }: any) {
         limit: ITEMS_PER_PAGE
     }, { skip: activeSubTab !== 'communities' });
 
+    const {
+        data: communitySearchResults,
+        isFetching: isFetchingCommunitySearch
+    } = useGetCommunitiesQuery({
+        search: debouncedCommunitySearch,
+        limit: 50
+    }, { skip: !isCommunityPickerVisible });
+
+    const selectedCommunity = useMemo(() => {
+        if (!selectedCommunityId) return null;
+        return communitiesData?.communities?.find((c: any) => c.id === selectedCommunityId);
+    }, [selectedCommunityId, communitiesData]);
+
     const isFetching = activeSubTab === 'communities' ? isFetchingCommunitiesList : (selectedCommunityId ? isFetchingCommunity : isFetchingGlobal);
-    const isLoading = activeSubTab === 'communities' ? isLoadingCommunitiesList : (selectedCommunityId ? (isLoadingCommunities || isLoadingCommunityTopics) : isLoadingGlobal);
+
+    const isLoading = activeSubTab === 'communities' ? isLoadingCommunitiesList : (selectedCommunityId ? (isLoadingCommunityTopics) : isLoadingGlobal);
     const topicsData = selectedCommunityId ? communityTopicsData : globalTopicsData;
     const listData = activeSubTab === 'communities' ? communitiesListData : topicsData;
     const topics = topicsData?.topics;
     const refetch = activeSubTab === 'communities' ? refetchCommunitiesList : (selectedCommunityId ? refetchCommunity : refetchGlobal);
-
 
     const headerComponent = useMemo(() => (
         <View style={styles.feedHeaderContainer}>
@@ -347,12 +333,7 @@ export function FeedScreen({ route }: any) {
                 </View>
             </View>
 
-            <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                style={styles.subTabs}
-                contentContainerStyle={styles.subTabsContent}
-            >
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.subTabs} contentContainerStyle={styles.subTabsContent}>
                 {['Topics', 'Activities', 'Communities', 'Mentions', 'Subscribed'].map((tab) => {
                     const tabKey = tab.toLowerCase();
                     if (!isLoggedIn && (tabKey === 'mentions' || tabKey === 'subscribed' || tabKey === 'activities')) return null;
@@ -383,27 +364,20 @@ export function FeedScreen({ route }: any) {
                             </TouchableOpacity>
                         ))}
                     </View>
+                </View>
+            )}
 
-                    <ScrollView
-                        horizontal
-                        showsHorizontalScrollIndicator={Platform.OS === 'web'}
-                        style={styles.categoryScroller}
-                        contentContainerStyle={styles.categoryScrollerContent}
-                    >
+            {activeSubTab === 'topics' && !isLoggedIn && (
+                <View style={styles.filtersContainer}>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={Platform.OS === 'web'} style={styles.categoryScroller} contentContainerStyle={styles.categoryScrollerContent}>
                         {categoryFilters.map((cat) => (
                             <TouchableOpacity
                                 key={cat.name}
-                                style={[
-                                    styles.categoryPill,
-                                    categorySearch === cat.name && { backgroundColor: cat.bg, borderColor: cat.color }
-                                ]}
+                                style={[styles.categoryPill, categorySearch === cat.name && { backgroundColor: cat.bg, borderColor: cat.color }]}
                                 onPress={() => setCategorySearch(prev => prev === cat.name ? '' : cat.name)}
                             >
                                 <cat.icon size={14} color={categorySearch === cat.name ? cat.color : '#6b7280'} />
-                                <Text style={[
-                                    styles.categoryPillText,
-                                    categorySearch === cat.name && { color: cat.color, fontWeight: 'bold' }
-                                ]}>
+                                <Text style={[styles.categoryPillText, categorySearch === cat.name && { color: cat.color, fontWeight: 'bold' }]}>
                                     {cat.name}
                                 </Text>
                             </TouchableOpacity>
@@ -412,7 +386,8 @@ export function FeedScreen({ route }: any) {
                 </View>
             )}
         </View>
-    ), [isLoggedIn, generalAnalytics, communityAnalytics, userProfile, searchQuery, activeSubTab, activeFilter, categorySearch, navigation]);
+    ), [isLoggedIn, generalAnalytics, communityAnalytics, userProfile, searchQuery, activeSubTab, activeFilter, categorySearch, navigation, selectedCommunityId]);
+
 
     const renderMentions = () => {
         if (isLoadingMentions) return (
@@ -445,14 +420,17 @@ export function FeedScreen({ route }: any) {
                         key={mention.id}
                         style={styles.mentionItem}
                         onPress={() => {
-                            const cid = mention.topic?.communityId || selectedCommunityId;
-                            if (cid) {
+                            const cid = mention.communityId || mention.topic?.communityId || mention.comment?.communityId || selectedCommunityId;
+                            const tId = mention.topicId || mention.comment?.topicId;
+                            if (cid && tId) {
                                 navigation.navigate('TopicDetail', {
                                     communityId: cid,
-                                    topicId: mention.topicId
+                                    topicId: tId
                                 });
                             }
                         }}
+
+
                     >
                         <View style={styles.mentionIconContainer}>
                             <AtSign size={20} color="#4f46e5" />
@@ -548,56 +526,80 @@ export function FeedScreen({ route }: any) {
         </View>
     );
 
-    return (
-        <View style={styles.screenContainer}>
-            {communitiesData?.communities && (
-                <View style={styles.communitySelectorContainer}>
-                    <ScrollView
-                        horizontal
-                        showsHorizontalScrollIndicator={Platform.OS === 'web'}
-                        style={styles.communitySelector}
-                        contentContainerStyle={styles.communitySelectorContent}
-                    >
-                        <TouchableOpacity
-                            style={[
-                                styles.communityTab,
-                                selectedCommunityId === null && styles.communityTabActive
-                            ]}
-                            onPress={() => setSelectedCommunityId(null)}
-                        >
-                            <Text style={[
-                                styles.communityTabText,
-                                selectedCommunityId === null && styles.communityTabTextActive
-                            ]}>
-                                Global
-                            </Text>
-                        </TouchableOpacity>
+    const FeedSkeleton = () => (
+        <View style={{ padding: 16 }}>
+            {activeSubTab === 'communities'
+                ? [1, 2, 3, 4, 5].map(i => (
+                    <View key={i} style={styles.communitySkeletonCard}>
+                        <Skeleton width={60} height={60} borderRadius={12} />
+                        <View style={{ marginLeft: 16, flex: 1 }}>
+                            <Skeleton width="20%" height={10} style={{ marginBottom: 4 }} />
+                            <Skeleton width="60%" height={18} style={{ marginBottom: 8 }} />
+                            <Skeleton width="40%" height={12} />
+                        </View>
+                        <Skeleton width={24} height={24} borderRadius={12} />
+                    </View>
+                ))
+                : [1, 2, 3, 4].map(i => (
+                    <View key={i} style={styles.topicSkeletonCard}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
+                            <Skeleton width={40} height={40} borderRadius={20} />
+                            <View style={{ marginLeft: 12, flex: 1 }}>
+                                <Skeleton width="40%" height={14} style={{ marginBottom: 4 }} />
+                                <Skeleton width="25%" height={10} />
+                            </View>
+                            <Skeleton width={60} height={20} borderRadius={10} />
+                        </View>
+                        <Skeleton width="90%" height={18} style={{ marginBottom: 12 }} />
+                        <Skeleton width="100%" height={14} style={{ marginBottom: 8 }} />
+                        <Skeleton width="70%" height={14} style={{ marginBottom: 16 }} />
+                        <View style={{ flexDirection: 'row', gap: 16 }}>
+                            <Skeleton width={40} height={12} />
+                            <Skeleton width={40} height={12} />
+                        </View>
+                    </View>
+                ))
+            }
+        </View>
+    );
 
-                        {(communitiesData?.communities || []).map((community: any) => (
-                            <TouchableOpacity
-                                key={community.id}
-                                style={[
-                                    styles.communityTab,
-                                    selectedCommunityId === community.id && styles.communityTabActive
-                                ]}
-                                onPress={() => setSelectedCommunityId(community.id)}
-                            >
-                                <Text style={[
-                                    styles.communityTabText,
-                                    selectedCommunityId === community.id && styles.communityTabTextActive
-                                ]}>
-                                    {community.name}
-                                </Text>
-                            </TouchableOpacity>
-                        ))}
-                    </ScrollView>
+    return (
+        <View style={[styles.screenContainer, { paddingTop: insets.top }]}>
+            {communitiesData?.communities && (
+                <View style={[styles.communitySelectorContainer, !isLoggedIn && { borderBottomWidth: 0, paddingBottom: 0, backgroundColor: 'transparent' }]}>
+                    {isLoggedIn ? (
+                        <TouchableOpacity
+                            style={styles.dropdownTrigger}
+                            onPress={() => setIsCommunityPickerVisible(true)}
+                        >
+                            <View style={styles.dropdownInner}>
+                                <Text style={styles.dropdownLabel}>COMMUNITY</Text>
+                                <View style={styles.dropdownValueRow}>
+                                    <Text style={styles.dropdownValue} numberOfLines={1}>
+                                        {selectedCommunity?.name || 'Global Feed'}
+                                    </Text>
+                                    <ChevronDown size={18} color="#0e7490" />
+                                </View>
+                            </View>
+                        </TouchableOpacity>
+                    ) : (
+                        <View style={styles.communityTab}>
+                            <Text style={[styles.communityTabText, { fontSize: 12, color: '#6b7280', fontWeight: 'bold' }]}>
+                                Global Feed
+                            </Text>
+                        </View>
+                    )}
                 </View>
             )}
 
+
             <FlatList
-                data={activeSubTab === 'topics'
-                    ? (activeFilter === 'trending' ? [] : (topics || []))
-                    : (activeSubTab === 'communities' ? (communitiesListData?.communities || []) : [])
+                data={(isFetching && currentPage === 1)
+                    ? []
+                    : (activeSubTab === 'topics'
+                        ? (activeFilter === 'trending' ? [] : (topics || []))
+                        : (activeSubTab === 'communities' ? (communitiesListData?.communities || []) : [])
+                    )
                 }
                 renderItem={({ item }: { item: any }) => {
                     if (activeSubTab === 'topics') {
@@ -628,7 +630,7 @@ export function FeedScreen({ route }: any) {
                 keyExtractor={(item) => item.id}
                 contentContainerStyle={styles.feed}
                 onRefresh={refetch}
-                refreshing={isLoading && activeSubTab === 'topics'}
+                refreshing={isFetching}
                 ListHeaderComponent={headerComponent}
                 ListFooterComponent={() => {
                     if (activeSubTab === 'mentions') return renderMentions();
@@ -645,9 +647,7 @@ export function FeedScreen({ route }: any) {
                                     disabled={currentPage === 1 || isFetching}
                                 >
                                     <ChevronLeft size={20} color={currentPage === 1 ? '#9ca3af' : '#0e7490'} />
-                                    <Text style={[styles.paginationButtonText, currentPage === 1 && styles.paginationButtonDisabledText]}>
-                                        Previous
-                                    </Text>
+                                    <Text style={[styles.paginationButtonText, currentPage === 1 && styles.paginationButtonDisabledText]}>Previous</Text>
                                 </TouchableOpacity>
                                 <View style={styles.pageIndicator}>
                                     {isFetching ? (
@@ -661,9 +661,7 @@ export function FeedScreen({ route }: any) {
                                     onPress={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
                                     disabled={currentPage >= totalPages || isFetching}
                                 >
-                                    <Text style={[styles.paginationButtonText, currentPage >= totalPages && styles.paginationButtonDisabledText]}>
-                                        Next
-                                    </Text>
+                                    <Text style={[styles.paginationButtonText, currentPage >= totalPages && styles.paginationButtonDisabledText]}>Next</Text>
                                     <ChevronRight size={20} color={currentPage >= totalPages ? '#9ca3af' : '#0e7490'} />
                                 </TouchableOpacity>
                             </View>
@@ -673,23 +671,12 @@ export function FeedScreen({ route }: any) {
                 }}
                 ListEmptyComponent={() => {
                     if (activeFilter === 'trending' && activeSubTab === 'topics') return renderTrendingEmpty();
-
-                    // For tabs that render in the footer, don't show the default empty state
-                    if (['mentions', 'subscribed', 'activities'].includes(activeSubTab)) {
-                        return null;
-                    }
-
-                    if (isLoading || isFetching) {
-                        return <FeedSkeleton />;
-                    }
+                    if (['mentions', 'subscribed', 'activities'].includes(activeSubTab)) return null;
+                    if (isLoading || isFetching) return <FeedSkeleton />;
                     return (
                         <View style={styles.emptyContainer}>
                             <View style={styles.emptyIcon}>
-                                {activeSubTab === 'communities' ? (
-                                    <Users size={48} color="#9ca3af" />
-                                ) : (
-                                    <MessageCircle size={48} color="#9ca3af" />
-                                )}
+                                {activeSubTab === 'communities' ? <Users size={48} color="#9ca3af" /> : <MessageCircle size={48} color="#9ca3af" />}
                             </View>
                             <Text style={styles.emptyText}>
                                 {activeSubTab === 'communities' ? 'No communities found' : 'No topics found'}
@@ -700,13 +687,114 @@ export function FeedScreen({ route }: any) {
             />
 
             {isLoggedIn && activeSubTab === 'topics' && (
-                <TouchableOpacity
-                    style={styles.fab}
-                    onPress={() => navigation.navigate('CreatePost')}
-                >
+                <TouchableOpacity style={styles.fab} onPress={() => navigation.navigate('CreatePost')}>
                     <Plus size={24} color="#fff" />
                 </TouchableOpacity>
             )}
+
+            {/* ── Community Picker Modal ── */}
+            <Modal
+                visible={isCommunityPickerVisible}
+                transparent
+                animationType="slide"
+                onRequestClose={() => setIsCommunityPickerVisible(false)}
+            >
+                <View style={styles.pickerOverlay}>
+                    <View style={styles.pickerCard}>
+                        <View style={styles.pickerHeader}>
+                            <Text style={styles.pickerTitle}>Select Community</Text>
+                            <TouchableOpacity onPress={() => setIsCommunityPickerVisible(false)}>
+                                <X size={24} color="#6b7280" />
+                            </TouchableOpacity>
+                        </View>
+
+                        <View style={styles.pickerSearchBox}>
+                            <Search size={18} color="#9ca3af" />
+                            <TextInput
+                                style={styles.pickerSearchInput}
+                                placeholder="Search communities..."
+                                value={communitySearch}
+                                onChangeText={setCommunitySearch}
+                                autoFocus
+                            />
+                            {communitySearch.length > 0 && (
+                                <TouchableOpacity onPress={() => setCommunitySearch('')}>
+                                    <X size={16} color="#9ca3af" />
+                                </TouchableOpacity>
+                            )}
+                        </View>
+
+                        <View style={[styles.pickerListContainer, { height: 400 }]}>
+
+                            {isFetchingCommunitySearch && communitySearch !== '' ? (
+                                <ActivityIndicator style={{ marginTop: 20 }} color="#0e7490" />
+                            ) : (
+                                <FlatList
+                                    data={[
+                                        { id: null, name: 'Global Feed' },
+                                        ...(communitySearchResults?.communities || [])
+                                    ]}
+                                    renderItem={({ item }: { item: any }) => (
+                                        <TouchableOpacity
+                                            style={[
+                                                styles.pickerItem,
+                                                selectedCommunityId === item.id && styles.pickerItemActive
+                                            ]}
+                                            onPress={() => {
+                                                setSelectedCommunityId(item.id);
+                                                setIsCommunityPickerVisible(false);
+                                                setCommunitySearch('');
+                                            }}
+                                        >
+                                            <Text style={[
+                                                styles.pickerItemText,
+                                                selectedCommunityId === item.id && styles.pickerItemActiveText
+                                            ]}>
+                                                {item.name}
+                                            </Text>
+                                            {selectedCommunityId === item.id && <Check size={16} color="#0e7490" />}
+                                        </TouchableOpacity>
+                                    )}
+                                    keyExtractor={(item) => item.id || 'global'}
+                                    ListEmptyComponent={() => (
+                                        <Text style={styles.pickerEmptyText}>No communities found</Text>
+                                    )}
+                                />
+                            )}
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* ── Cross-Platform CONFIRM Modal ── */}
+            <Modal
+                visible={!!confirmModal}
+                transparent
+                animationType="fade"
+                onRequestClose={dismissConfirm}
+            >
+
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalCard}>
+                        <Text style={styles.modalTitle}>{confirmModal?.title}</Text>
+                        <Text style={styles.modalMessage}>{confirmModal?.message}</Text>
+                        <View style={styles.modalActions}>
+                            <TouchableOpacity style={styles.modalCancelBtn} onPress={dismissConfirm}>
+                                <Text style={styles.modalCancelText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.modalConfirmBtn, confirmModal?.danger && styles.modalDangerBtn]}
+                                onPress={() => {
+                                    dismissConfirm();
+                                    confirmModal?.onConfirm();
+                                }}
+                            >
+                                <Text style={styles.modalConfirmText}>{confirmModal?.confirmText}</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 }
@@ -1084,11 +1172,6 @@ const styles = StyleSheet.create({
         marginLeft: 8,
         fontSize: 14,
         color: '#111827',
-        ...Platform.select({
-            web: {
-                outlineStyle: 'none',
-            },
-        }),
     },
     paginationContainer: {
         flexDirection: 'row',
@@ -1165,4 +1248,192 @@ const styles = StyleSheet.create({
         lineHeight: 20,
         paddingHorizontal: 40,
     },
+    topicSkeletonCard: {
+        backgroundColor: '#fff',
+        padding: 16,
+        borderRadius: 16,
+        marginBottom: 12,
+        borderWidth: 1,
+        borderColor: '#f1f5f9'
+    },
+    communitySkeletonCard: {
+        backgroundColor: '#fff',
+        padding: 16,
+        borderRadius: 16,
+        marginBottom: 12,
+        borderWidth: 1,
+        borderColor: '#f1f5f9',
+        flexDirection: 'row',
+        alignItems: 'center'
+    },
+    // Modal Styles
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.45)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 24,
+    },
+    modalCard: {
+        backgroundColor: '#fff',
+        borderRadius: 16,
+        padding: 24,
+        width: '100%',
+        maxWidth: 400,
+        shadowColor: '#000',
+        shadowOpacity: 0.15,
+        shadowRadius: 20,
+        shadowOffset: { width: 0, height: 8 },
+        elevation: 8,
+    },
+    modalTitle: {
+        fontSize: 17,
+        fontWeight: '700',
+        color: '#111827',
+        marginBottom: 8,
+    },
+    modalMessage: {
+        fontSize: 14,
+        color: '#6b7280',
+        lineHeight: 22,
+        marginBottom: 20,
+    },
+    modalActions: {
+        flexDirection: 'row',
+        gap: 12,
+    },
+    modalCancelBtn: {
+        flex: 1,
+        paddingVertical: 12,
+        borderRadius: 10,
+        backgroundColor: '#f1f5f9',
+        alignItems: 'center',
+    },
+    modalCancelText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#374151',
+    },
+    modalConfirmBtn: {
+        flex: 1,
+        paddingVertical: 12,
+        borderRadius: 10,
+        backgroundColor: '#0e7490',
+        alignItems: 'center',
+    },
+    modalDangerBtn: {
+        backgroundColor: '#ef4444',
+    },
+    modalConfirmText: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: '#fff',
+    },
+    communitySelectorContainer: {
+        backgroundColor: '#fff',
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: '#f3f4f6',
+    },
+    dropdownTrigger: {
+        backgroundColor: '#f9fafb',
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#e5e7eb',
+        paddingHorizontal: 16,
+        paddingVertical: 10,
+    },
+    dropdownInner: {
+        gap: 2,
+    },
+    dropdownLabel: {
+        fontSize: 10,
+        fontWeight: 'bold',
+        color: '#9ca3af',
+        letterSpacing: 0.5,
+    },
+    dropdownValueRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    dropdownValue: {
+        fontSize: 15,
+        fontWeight: 'bold',
+        color: '#111827',
+        flex: 1,
+        marginRight: 8,
+    },
+    // Picker Modal Styles
+    pickerOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'flex-end',
+    },
+    pickerCard: {
+        backgroundColor: '#fff',
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
+        maxHeight: '80%',
+    },
+    pickerHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: 20,
+        borderBottomWidth: 1,
+        borderBottomColor: '#f3f4f6',
+    },
+    pickerTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: '#111827',
+    },
+    pickerSearchBox: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#f3f4f6',
+        margin: 16,
+        paddingHorizontal: 12,
+        borderRadius: 12,
+        height: 48,
+    },
+    pickerSearchInput: {
+        flex: 1,
+        marginLeft: 8,
+        fontSize: 15,
+        color: '#111827',
+    },
+    pickerListContainer: {
+        paddingHorizontal: 16,
+        paddingBottom: Platform.OS === 'ios' ? 40 : 20,
+    },
+    pickerItem: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingVertical: 16,
+        paddingHorizontal: 12,
+        borderRadius: 12,
+        marginBottom: 4,
+    },
+    pickerItemActive: {
+        backgroundColor: 'rgba(14, 116, 144, 0.08)',
+    },
+    pickerItemText: {
+        fontSize: 16,
+        color: '#374151',
+    },
+    pickerItemActiveText: {
+        color: '#0e7490',
+        fontWeight: 'bold',
+    },
+    pickerEmptyText: {
+        textAlign: 'center',
+        color: '#9ca3af',
+        marginTop: 40,
+        fontSize: 14,
+    },
 });
+
