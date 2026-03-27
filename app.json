@@ -1,8 +1,9 @@
 {
   "expo": {
-    "name": "PLCARP",
-    "slug": "plcarp",
+    "name": "PLCAP",
+    "slug": "plcap",
     "version": "1.0.0",
+    "jsEngine": "hermes",
     "orientation": "portrait",
     "icon": "./assets/logo1.png",
     "userInterfaceStyle": "light",
@@ -14,23 +15,37 @@
     "assetBundlePatterns": [
       "**/*"
     ],
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "The app accesses your photos to let you update your profile picture."
+        }
+      ]
+    ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.sevenstar.plcap"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/logo1.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.stephent333.plcarp"
+      "package": "com.sevenstar.plcap",
+      "versionCode": 3,
+      "largeHeap": true,
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/logo1.png"
     },
-    "owner": "stephent333",
+    "owner": "seven_star_consultants_limited",
     "extra": {
       "eas": {
-        "projectId": "2bdeaa00-aae7-4e1d-9591-c597e7e2e502"
+        "projectId": "ffaf8504-6eb4-457e-afb5-ad43af4b7e1b"
       }
     }
   }
