@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, FlatList, Platform, Modal, KeyboardAvoidingView, Image } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { X, ChevronDown } from 'lucide-react-native';
 import { useGetCommunitiesQuery, useCreateCommunityTopicMutation, useSearchCommunityMembersQuery, CommunitySearchResult } from '../services/communityApi';
 
@@ -12,6 +13,7 @@ export function CreatePost({ onCancel, onSuccess }: CreatePostProps) {
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [selectedCommunity, setSelectedCommunity] = useState<CommunitySearchResult | null>(null);
+  const insets = useSafeAreaInsets();
   const [showCommunityPicker, setShowCommunityPicker] = useState(false);
   const [uploading, setUploading] = useState(false);
 
@@ -79,7 +81,7 @@ export function CreatePost({ onCancel, onSuccess }: CreatePostProps) {
           body: body.trim()
         }
       }).unwrap();
-      if(response?.status){
+      if (response?.status) {
         showConfirm({
           title: 'Success',
           message: response.message || 'Topic created successfully!',
@@ -87,7 +89,7 @@ export function CreatePost({ onCancel, onSuccess }: CreatePostProps) {
           hideCancel: true,
           onConfirm: () => onSuccess()
         });
-      }else{
+      } else {
         showConfirm({ title: 'Error', message: response.message || 'Failed to create topic', confirmText: 'Retry', hideCancel: true, onConfirm: () => { } });
       }
     } catch (error: any) {
@@ -99,7 +101,7 @@ export function CreatePost({ onCancel, onSuccess }: CreatePostProps) {
 
   if (showCommunityPicker) {
     return (
-      <View style={styles.container}>
+      <View style={[styles.container, { paddingTop: insets.top }]}>
         <View style={[styles.header, { borderBottomWidth: 1, borderBottomColor: '#f3f4f6' }]}>
           <TouchableOpacity onPress={() => setShowCommunityPicker(false)}>
             <X size={24} color="#374151" />
@@ -135,115 +137,117 @@ export function CreatePost({ onCancel, onSuccess }: CreatePostProps) {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <View style={styles.header}>
-        <TouchableOpacity onPress={onCancel}>
-          <X size={24} color="#374151" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Start a New Discussion</Text>
-        <View style={{ width: 24 }} />
-      </View>
-
-      <ScrollView style={styles.content} keyboardShouldPersistTaps="handled">
-        <View style={styles.formCard}>
-          <Text style={styles.label}>Community</Text>
-          <TouchableOpacity
-            style={styles.communitySelector}
-            onPress={() => setShowCommunityPicker(true)}
-          >
-            <Text style={[styles.communitySelectorText, !selectedCommunity && { color: '#9ca3af' }]}>
-              {selectedCommunity ? selectedCommunity.name : 'Select a community'}
-            </Text>
-            <ChevronDown size={20} color="#6b7280" />
+      <View style={{ flex: 1, paddingTop: insets.top }}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={onCancel}>
+            <X size={24} color="#374151" />
           </TouchableOpacity>
+          <Text style={styles.headerTitle}>Start a New Discussion</Text>
+          <View style={{ width: 24 }} />
+        </View>
 
-          <Text style={styles.label}>Title</Text>
-          <TextInput
-            style={styles.titleInput}
-            placeholder="Topic title..."
-            placeholderTextColor="#9ca3af"
-            value={title}
-            onChangeText={setTitle}
-          />
+        <ScrollView style={styles.content} keyboardShouldPersistTaps="handled">
+          <View style={styles.formCard}>
+            <Text style={styles.label}>Community</Text>
+            <TouchableOpacity
+              style={styles.communitySelector}
+              onPress={() => setShowCommunityPicker(true)}
+            >
+              <Text style={[styles.communitySelectorText, !selectedCommunity && { color: '#9ca3af' }]}>
+                {selectedCommunity ? selectedCommunity.name : 'Select a community'}
+              </Text>
+              <ChevronDown size={20} color="#6b7280" />
+            </TouchableOpacity>
 
-          <Text style={styles.label}>Discussion Content</Text>
-          <View style={styles.bodyInputContainer}>
+            <Text style={styles.label}>Title</Text>
             <TextInput
-              style={styles.bodyInput}
-              placeholder="Provide details about your discussion topic... (type @ to mention someone)"
+              style={styles.titleInput}
+              placeholder="Topic title..."
               placeholderTextColor="#9ca3af"
-              multiline
-              value={body}
-              onChangeText={handleInputChange}
+              value={title}
+              onChangeText={setTitle}
             />
 
-            {/* Mentions Overlay */}
-            {showMentions && memberResults && memberResults.length > 0 && (
-              <View style={styles.mentionsOverlay}>
-                {memberResults.map((member) => (
-                  <TouchableOpacity
-                    key={member.id}
-                    style={styles.mentionItem}
-                    onPress={() => handleSelectMention(member)}
-                  >
-                    <View style={styles.mentionAvatar}>
-                      <Text style={styles.mentionAvatarText}>{member.fullName.charAt(0)}</Text>
-                    </View>
-                    <Text style={styles.mentionName}>{member.fullName}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-          </View>
-        </View>
+            <Text style={styles.label}>Discussion Content</Text>
+            <View style={styles.bodyInputContainer}>
+              <TextInput
+                style={styles.bodyInput}
+                placeholder="Provide details about your discussion topic... (type @ to mention someone)"
+                placeholderTextColor="#9ca3af"
+                multiline
+                value={body}
+                onChangeText={handleInputChange}
+              />
 
-        <View style={styles.actions}>
-          <TouchableOpacity style={styles.cancelButton} onPress={onCancel}>
-            <Text style={styles.cancelButtonText}>Cancel</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.postButton, uploading && styles.postButtonDisabled]}
-            onPress={handlePost}
-            disabled={uploading}
-          >
-            {uploading ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <Text style={styles.postButtonText}>Post Topic</Text>
-            )}
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
-
-      {/* ── Cross-Platform CONFIRM Modal ── */}
-      <Modal
-        visible={!!confirmModal}
-        transparent
-        animationType="fade"
-        onRequestClose={dismissConfirm}
-      >
-        <View style={styles.confirmOverlay}>
-          <View style={styles.confirmCard}>
-            <Text style={styles.confirmTitle}>{confirmModal?.title}</Text>
-            <Text style={styles.confirmMessage}>{confirmModal?.message}</Text>
-            <View style={styles.confirmActions}>
-              {!confirmModal?.hideCancel && (
-                <TouchableOpacity style={styles.confirmCancelBtn} onPress={dismissConfirm}>
-                  <Text style={styles.confirmCancelText}>Cancel</Text>
-                </TouchableOpacity>
+              {/* Mentions Overlay */}
+              {showMentions && memberResults && memberResults.length > 0 && (
+                <View style={styles.mentionsOverlay}>
+                  {memberResults.map((member) => (
+                    <TouchableOpacity
+                      key={member.id}
+                      style={styles.mentionItem}
+                      onPress={() => handleSelectMention(member)}
+                    >
+                      <View style={styles.mentionAvatar}>
+                        <Text style={styles.mentionAvatarText}>{member.fullName.charAt(0)}</Text>
+                      </View>
+                      <Text style={styles.mentionName}>{member.fullName}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
               )}
-              <TouchableOpacity
-                style={[styles.confirmOkBtn, confirmModal?.danger && styles.confirmDangerBtn]}
-                onPress={() => {
-                  dismissConfirm();
-                  confirmModal?.onConfirm();
-                }}
-              >
-                <Text style={styles.confirmOkText}>{confirmModal?.confirmText}</Text>
-              </TouchableOpacity>
             </View>
           </View>
-        </View>
-      </Modal>
+
+          <View style={styles.actions}>
+            <TouchableOpacity style={styles.cancelButton} onPress={onCancel}>
+              <Text style={styles.cancelButtonText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.postButton, uploading && styles.postButtonDisabled]}
+              onPress={handlePost}
+              disabled={uploading}
+            >
+              {uploading ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.postButtonText}>Post Topic</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+
+        {/* ── Cross-Platform CONFIRM Modal ── */}
+        <Modal
+          visible={!!confirmModal}
+          transparent
+          animationType="fade"
+          onRequestClose={dismissConfirm}
+        >
+          <View style={styles.confirmOverlay}>
+            <View style={styles.confirmCard}>
+              <Text style={styles.confirmTitle}>{confirmModal?.title}</Text>
+              <Text style={styles.confirmMessage}>{confirmModal?.message}</Text>
+              <View style={styles.confirmActions}>
+                {!confirmModal?.hideCancel && (
+                  <TouchableOpacity style={styles.confirmCancelBtn} onPress={dismissConfirm}>
+                    <Text style={styles.confirmCancelText}>Cancel</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity
+                  style={[styles.confirmOkBtn, confirmModal?.danger && styles.confirmDangerBtn]}
+                  onPress={() => {
+                    dismissConfirm();
+                    confirmModal?.onConfirm();
+                  }}
+                >
+                  <Text style={styles.confirmOkText}>{confirmModal?.confirmText}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      </View>
     </KeyboardAvoidingView>
   );
 }

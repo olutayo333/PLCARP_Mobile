@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, Modal } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowLeft, ArrowRight, Eye, EyeOff, Check } from 'lucide-react-native';
 import { useSignupMutation } from '../services/authApi';
 import CustomAlert from '../utils/CustomAlert';
@@ -25,6 +26,7 @@ export function ExpertRegistrationScreen({ onBack, onComplete }: {
 }) {
   const [step, setStep] = useState(1);
   const [showPassword, setShowPassword] = useState(false);
+  const insets = useSafeAreaInsets();
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [selectedExpertise, setSelectedExpertise] = useState<string[]>([]);
 
@@ -61,21 +63,21 @@ export function ExpertRegistrationScreen({ onBack, onComplete }: {
   const handleNext = () => {
     if (step === 1) {
       if (!email || !password) {
-        showConfirm({ title: 'Error', message: 'Please fill in all fields', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
+        showConfirm({ title: 'Error', message: 'Please fill in all fields', confirmText: 'OK', hideCancel: true, onConfirm: () => { } });
         return;
       }
       if (!emailRegex.test(email)) {
-        showConfirm({ title: 'Error', message: 'Enter a valid email address', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
+        showConfirm({ title: 'Error', message: 'Enter a valid email address', confirmText: 'OK', hideCancel: true, onConfirm: () => { } });
         return;
       }
       if (!passwordRegex.test(password)) {
-        showConfirm({ title: 'Error', message: 'Password must contain an uppercase letter, a number and a symbol', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
+        showConfirm({ title: 'Error', message: 'Password must contain an uppercase letter, a number and a symbol', confirmText: 'OK', hideCancel: true, onConfirm: () => { } });
         return;
       }
       setStep(2);
     } else if (step === 2) {
       if (!fullName || !professionalTitle || !yearsExperience || !phoneNumber) {
-        showConfirm({ title: 'Error', message: 'Please fill in all fields', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
+        showConfirm({ title: 'Error', message: 'Please fill in all fields', confirmText: 'OK', hideCancel: true, onConfirm: () => { } });
         return;
       }
       setStep(3);
@@ -86,7 +88,7 @@ export function ExpertRegistrationScreen({ onBack, onComplete }: {
 
   const handleSubmit = async () => {
     if (selectedExpertise.length === 0 || !termsAccepted) {
-      showConfirm({ title: 'Error', message: 'Please select at least one area of expertise and accept terms', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
+      showConfirm({ title: 'Error', message: 'Please select at least one area of expertise and accept terms', confirmText: 'OK', hideCancel: true, onConfirm: () => { } });
       return;
     }
     const payload = {
@@ -102,19 +104,19 @@ export function ExpertRegistrationScreen({ onBack, onComplete }: {
     try {
       const response = await registerApi(payload).unwrap();
       if (response.status) {
-        showConfirm({ 
-          title: 'Success', 
-          message: response?.message || 'Registration successful! Please verify your email.', 
-          confirmText: 'Great!', 
+        showConfirm({
+          title: 'Success',
+          message: response?.message || 'Registration successful! Please verify your email.',
+          confirmText: 'Great!',
           hideCancel: true,
-          onConfirm: () => onComplete() 
+          onConfirm: () => onComplete()
         });
       } else {
-        showConfirm({ title: 'Error', message: response.message || 'Registration failed', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
+        showConfirm({ title: 'Error', message: response.message || 'Registration failed', confirmText: 'OK', hideCancel: true, onConfirm: () => { } });
       }
     } catch (error: any) {
       const serverError = error?.data?.message || 'Registration failed. Please try again.';
-      showConfirm({ title: 'Error', message: serverError, confirmText: 'Retry', hideCancel: true, onConfirm: () => {} });
+      showConfirm({ title: 'Error', message: serverError, confirmText: 'Retry', hideCancel: true, onConfirm: () => { } });
     }
   };
 
@@ -131,7 +133,7 @@ export function ExpertRegistrationScreen({ onBack, onComplete }: {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}
     >
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 20 }]}>
         <View style={styles.progressContainer}>
           <View style={styles.progressHeader}>
             <Text style={styles.stepText}>STEP {step} OF 3</Text>
@@ -470,6 +472,7 @@ const styles = StyleSheet.create({
   footer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    gap: 12,
     marginTop: 40,
     marginBottom: 40,
   },
@@ -484,7 +487,7 @@ const styles = StyleSheet.create({
     borderColor: '#d1d5db',
   },
   prevButtonText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
     color: '#111827',
   },
@@ -493,14 +496,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     height: 48,
-    paddingHorizontal: 24,
+    paddingHorizontal: 16,
     borderRadius: 8,
     backgroundColor: '#0e7490',
     justifyContent: 'center',
-    minWidth: 140,
+    flex: 1,
   },
   nextButtonText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
     color: '#fff',
   },

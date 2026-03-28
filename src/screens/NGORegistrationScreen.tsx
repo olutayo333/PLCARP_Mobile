@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, Modal, FlatList } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowLeft, ArrowRight, Eye, EyeOff, ChevronDown, Check, X } from 'lucide-react-native';
 import { useSignupMutation } from '../services/authApi';
 import { NIGERIA_STATES_LGAS } from '../constants/statesAndLgas';
@@ -36,6 +37,7 @@ export function NGORegistrationScreen({ onBack, onComplete }: {
 }) {
   const [step, setStep] = useState(1);
   const [showPassword, setShowPassword] = useState(false);
+  const insets = useSafeAreaInsets();
   const [termsAccepted, setTermsAccepted] = useState(false);
 
   const [registerApi, { isLoading: registerLoading }] = useSignupMutation();
@@ -227,10 +229,11 @@ export function NGORegistrationScreen({ onBack, onComplete }: {
       </View>
     </Modal>
   );
+
   return (
     <Wrapper>
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 20 }]}
         style={{ flex: 1 }}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
@@ -729,6 +732,7 @@ const styles = StyleSheet.create({
   footer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    gap: 12,
     marginTop: 40,
     marginBottom: 40,
   },
@@ -743,7 +747,7 @@ const styles = StyleSheet.create({
     borderColor: '#d1d5db',
   },
   prevButtonText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
     color: '#111827',
   },
@@ -752,14 +756,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     height: 48,
-    paddingHorizontal: 24,
+    paddingHorizontal: 16,
     borderRadius: 8,
     backgroundColor: '#0e7490',
     justifyContent: 'center',
-    minWidth: 140,
+    flex: 1,
   },
   nextButtonText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
     color: '#fff',
   },
