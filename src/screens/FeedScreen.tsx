@@ -224,8 +224,8 @@ export function FeedScreen({ route }: any) {
     const { data: generalAnalytics } = useGetGeneralAnalyticsQuery(undefined, { skip: !isLoggedIn || selectedCommunityId !== null });
     const { data: communityAnalytics } = useGetCommunityAnalyticsQuery(selectedCommunityId || '', { skip: !selectedCommunityId });
     const { data: userProfile } = useGetUserProfileQuery(undefined, { skip: !isLoggedIn });
-    const { data: subscriptions } = useGetMySubscriptionsQuery(undefined, { skip: !isLoggedIn || activeSubTab !== 'subscribed' });
-    const { data: mentions, isLoading: isLoadingMentions } = useGetMentionsQuery(undefined, { skip: !isLoggedIn || activeSubTab !== 'mentions' });
+    const { data: subscriptions, refetch: refetchSubscriptions } = useGetMySubscriptionsQuery(undefined, { skip: !isLoggedIn || activeSubTab !== 'subscribed' });
+    const { data: mentions, isLoading: isLoadingMentions, refetch: refetchMentions } = useGetMentionsQuery(undefined, { skip: !isLoggedIn || activeSubTab !== 'mentions' });
 
     const {
         data: communitiesListData,
@@ -257,7 +257,13 @@ export function FeedScreen({ route }: any) {
     const topicsData = selectedCommunityId ? communityTopicsData : globalTopicsData;
     const listData = activeSubTab === 'communities' ? communitiesListData : topicsData;
     const topics = topicsData?.topics;
-    const refetch = activeSubTab === 'communities' ? refetchCommunitiesList : (selectedCommunityId ? refetchCommunity : refetchGlobal);
+    const refetch = () => {
+        if (activeSubTab === 'communities') return refetchCommunitiesList();
+        if (activeSubTab === 'mentions') return refetchMentions();
+        if (activeSubTab === 'subscribed') return refetchSubscriptions();
+        if (activeSubTab === 'activities') return; // Mock data, nothing to refetch
+        return selectedCommunityId ? refetchCommunity() : refetchGlobal();
+    };
 
     const headerComponent = useMemo(() => (
         <View style={styles.feedHeaderContainer}>
@@ -413,105 +419,93 @@ export function FeedScreen({ route }: any) {
             );
         }
 
-        return (
-            <View style={styles.mentionsList}>
-                {mentions.map(mention => (
-                    <TouchableOpacity
-                        key={mention.id}
-                        style={styles.mentionItem}
-                        onPress={() => {
-                            const cid = mention.communityId || mention.topic?.communityId || mention.comment?.communityId || selectedCommunityId;
-                            const tId = mention.topicId || mention.comment?.topicId;
-                            if (cid && tId) {
-                                navigation.navigate('TopicDetail', {
-                                    communityId: cid,
-                                    topicId: tId
-                                });
-                            }
-                        }}
-
-
-                    >
-                        <View style={styles.mentionIconContainer}>
-                            <AtSign size={20} color="#4f46e5" />
-                        </View>
-                        <View style={styles.mentionContent}>
-                            <Text style={styles.mentionTitle}>Mentioned you in a {mention.comment ? 'comment' : 'topic'}</Text>
-                            <Text style={styles.mentionSnippet} numberOfLines={2}>
-                                {mention.comment ? mention.comment.body : mention.topic?.title}
-                            </Text>
-                            <Text style={styles.mentionDate}>{new Date(mention.createdAt).toLocaleDateString()}</Text>
-                        </View>
-                        <ArrowRight size={16} color="#9ca3af" />
-                    </TouchableOpacity>
-                ))}
-            </View>
-        );
+        return null;
     };
+
+    const renderMentionItem = ({ item: mention }: any) => (
+        <TouchableOpacity
+            style={styles.mentionItem}
+            onPress={() => {
+                const cid = mention.communityId || mention.topic?.communityId || mention.comment?.communityId || selectedCommunityId;
+                const tId = mention.topicId || mention.comment?.topicId;
+                if (cid && tId) {
+                    navigation.navigate('TopicDetail', {
+                        communityId: cid,
+                        topicId: tId
+                    });
+                }
+            }}
+        >
+            <View style={styles.mentionIconContainer}>
+                <AtSign size={20} color="#4f46e5" />
+            </View>
+            <View style={styles.mentionContent}>
+                <Text style={styles.mentionTitle}>Mentioned you in a {mention.comment ? 'comment' : 'topic'}</Text>
+                <Text style={styles.mentionSnippet} numberOfLines={2}>
+                    {mention.comment ? mention.comment.body : mention.topic?.title}
+                </Text>
+                <Text style={styles.mentionDate}>{new Date(mention.createdAt).toLocaleDateString()}</Text>
+            </View>
+            <ArrowRight size={16} color="#9ca3af" />
+        </TouchableOpacity>
+    );
+
+    const renderSubscribedItem = ({ item: community }: any) => (
+        <TouchableOpacity
+            style={styles.subscriptionItem}
+            onPress={() => {
+                setSelectedCommunityId(community.id);
+                setActiveSubTab('topics');
+            }}
+        >
+            <View style={styles.subscriptionInfo}>
+                <Text style={styles.subscriptionCategory}>{community.category}</Text>
+                <Text style={styles.subscriptionName}>{community.name}</Text>
+                <View style={styles.subscribedBadge}>
+                    <Check size={12} color="#059669" />
+                    <Text style={styles.subscribedBadgeText}>Joined</Text>
+                </View>
+            </View>
+            <View style={styles.subscriptionStats}>
+                <View style={styles.subStat}>
+                    <MessageCircle size={14} color="#6b7280" />
+                    <Text style={styles.subStatText}>{community.topicCount}</Text>
+                </View>
+                <View style={styles.subStat}>
+                    <Users size={14} color="#6b7280" />
+                    <Text style={styles.subStatText}>{community.memberCount}</Text>
+                </View>
+            </View>
+        </TouchableOpacity>
+    );
 
     const renderSubscribed = () => (
         <View style={styles.subscribedContainer}>
-            {subscriptions?.map((community: any) => (
-                <TouchableOpacity
-                    key={community.id}
-                    style={styles.subscriptionItem}
-                    onPress={() => {
-                        setSelectedCommunityId(community.id);
-                        setActiveSubTab('topics');
-                    }}
-                >
-                    <View style={styles.subscriptionInfo}>
-                        <Text style={styles.subscriptionCategory}>{community.category}</Text>
-                        <Text style={styles.subscriptionName}>{community.name}</Text>
-                        <View style={styles.subscribedBadge}>
-                            <Check size={12} color="#059669" />
-                            <Text style={styles.subscribedBadgeText}>Joined</Text>
-                        </View>
-                    </View>
-                    <View style={styles.subscriptionStats}>
-                        <View style={styles.subStat}>
-                            <MessageCircle size={14} color="#6b7280" />
-                            <Text style={styles.subStatText}>{community.topicCount}</Text>
-                        </View>
-                        <View style={styles.subStat}>
-                            <Users size={14} color="#6b7280" />
-                            <Text style={styles.subStatText}>{community.memberCount}</Text>
-                        </View>
-                    </View>
-                </TouchableOpacity>
-            ))}
+            {/* Handled by FlatList data directly */}
         </View>
     );
 
-    const renderActivities = () => {
-        const mockActivities = [
-            {
-                id: '1',
-                topicTitle: 'Communication and Advocacy strategies f...',
-                authorName: 'ASomebody',
-                date: 'Mar 15, 2023',
-                body: 'This is replying the main post',
-                likes: 1
-            },
-            {
-                id: '2',
-                topicTitle: 'Communication and Advocacy strategies f...',
-                authorName: 'ASomebody',
-                date: 'Mar 15, 2023',
-                body: 'This is replying the main post',
-                likes: 1
-            }
-        ];
+    const mockActivities = [
+        {
+            id: '1',
+            topicTitle: 'Communication and Advocacy strategies f...',
+            authorName: 'ASomebody',
+            date: 'Mar 15, 2023',
+            body: 'This is replying the main post',
+            likes: 1
+        },
+        {
+            id: '2',
+            topicTitle: 'Communication and Advocacy strategies f...',
+            authorName: 'ASomebody',
+            date: 'Mar 15, 2023',
+            body: 'This is replying the main post',
+            likes: 1
+        }
+    ];
 
-        return (
-            <View style={styles.activitiesContainer}>
-                {mockActivities.map(activity => (
-                    <View key={activity.id}>
-                        <ActivityCard activity={activity} />
-                    </View>
-                ))}
-            </View>
-        );
+    const renderActivities = () => {
+        return null;
     };
 
     const renderTrendingEmpty = () => (
@@ -598,7 +592,11 @@ export function FeedScreen({ route }: any) {
                     ? []
                     : (activeSubTab === 'topics'
                         ? (activeFilter === 'trending' ? [] : (topics || []))
-                        : (activeSubTab === 'communities' ? (communitiesListData?.communities || []) : [])
+                        : activeSubTab === 'communities' ? (communitiesListData?.communities || [])
+                            : activeSubTab === 'mentions' ? (mentions || [])
+                                : activeSubTab === 'subscribed' ? (subscriptions || [])
+                                    : activeSubTab === 'activities' ? mockActivities
+                                        : []
                     )
                 }
                 renderItem={({ item }: { item: any }) => {
@@ -633,10 +631,6 @@ export function FeedScreen({ route }: any) {
                 refreshing={isFetching}
                 ListHeaderComponent={headerComponent}
                 ListFooterComponent={() => {
-                    if (activeSubTab === 'mentions') return renderMentions();
-                    if (activeSubTab === 'subscribed') return renderSubscribed();
-                    if (activeSubTab === 'activities') return renderActivities();
-
                     if ((activeSubTab === 'topics' || activeSubTab === 'communities') && listData) {
                         const totalPages = (listData as any).totalPages || (listData as any).pages || 1;
                         return (
@@ -671,8 +665,26 @@ export function FeedScreen({ route }: any) {
                 }}
                 ListEmptyComponent={() => {
                     if (activeFilter === 'trending' && activeSubTab === 'topics') return renderTrendingEmpty();
-                    if (['mentions', 'subscribed', 'activities'].includes(activeSubTab)) return null;
                     if (isLoading || isFetching) return <FeedSkeleton />;
+
+                    if (activeSubTab === 'mentions') {
+                        return (
+                            <View style={styles.emptyContainer}>
+                                <AtSign size={40} color="#9ca3af" style={{ marginBottom: 10 }} />
+                                <Text style={styles.emptyText}>No mentions yet</Text>
+                            </View>
+                        );
+                    }
+
+                    if (activeSubTab === 'subscribed') {
+                        return (
+                            <View style={styles.emptyContainer}>
+                                <Users size={40} color="#9ca3af" style={{ marginBottom: 10 }} />
+                                <Text style={styles.emptyText}>No subscriptions yet</Text>
+                            </View>
+                        );
+                    }
+
                     return (
                         <View style={styles.emptyContainer}>
                             <View style={styles.emptyIcon}>
