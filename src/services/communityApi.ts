@@ -158,6 +158,7 @@ export interface CommunityMention {
   commentId: string;
   comment?: any;
   createdAt: string;
+  communityId: string
 }
 
 export interface CommunityAnalytics {

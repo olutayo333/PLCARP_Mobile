@@ -937,11 +937,11 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: '#374151',
     },
-    communitySelectorContainer: {
-        backgroundColor: '#fff',
-        borderBottomWidth: 1,
-        borderBottomColor: '#f3f4f6',
-    },
+    // communitySelectorContainer: {
+    //     backgroundColor: '#fff',
+    //     borderBottomWidth: 1,
+    //     borderBottomColor: '#f3f4f6',
+    // },
     communitySelector: {
         paddingVertical: 12,
     },
@@ -1335,6 +1335,9 @@ const styles = StyleSheet.create({
         paddingVertical: 12,
         borderBottomWidth: 1,
         borderBottomColor: '#f3f4f6',
+        // backgroundColor: '#fff',
+        // borderBottomWidth: 1,
+        // borderBottomColor: '#f3f4f6',
     },
     dropdownTrigger: {
         backgroundColor: '#f9fafb',
