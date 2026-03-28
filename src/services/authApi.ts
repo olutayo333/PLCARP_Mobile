@@ -1,12 +1,12 @@
-import {apiSlice} from './apiSlice';
+import { apiSlice } from './apiSlice';
 
 export const authApiSlice = apiSlice.injectEndpoints({
   endpoints: (builder) => ({
-    signup: builder.mutation<{status: boolean; message: string; data: any}, {email: string; password: string}>({
-      query: (credentials) => ({
+    signup: builder.mutation<{ status: boolean; message: string; data: any }, any>({
+      query: (payload) => ({
         url: '/users/signup',
         method: 'POST',
-        body: credentials,
+        body: payload,
       }),
     }),
 
@@ -50,7 +50,7 @@ export const authApiSlice = apiSlice.injectEndpoints({
       }),
     }),
 
-    logout: builder.mutation<{status: boolean; message: string}, void>({
+    logout: builder.mutation<{ status: boolean; message: string }, void>({
       query: () => ({
         url: '/logout',
         method: 'POST',

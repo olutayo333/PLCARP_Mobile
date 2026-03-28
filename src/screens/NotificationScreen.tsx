@@ -5,10 +5,10 @@ const Alert = CustomAlert;
 import { StyleSheet, View, Text, TouchableOpacity, FlatList, Image, ActivityIndicator, RefreshControl, ScrollView, Animated, Modal, Platform } from 'react-native';;
 import { Bell, CheckCheck, Trash2, MessageSquare, Heart, Filter, RefreshCcw, UserCheck, Calendar, ChevronDown, Info, CheckCircle, CheckCircle2, Clock } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { 
-    useGetNotificationsQuery, 
-    useMarkAllReadMutation, 
-    useMarkReadMutation, 
+import {
+    useGetNotificationsQuery,
+    useMarkAllReadMutation,
+    useMarkReadMutation,
     useDeleteNotificationMutation,
     useClearNotificationsMutation,
     NotificationType,
@@ -36,7 +36,7 @@ const timeAgo = (date: Date) => {
 export function NotificationScreen({ isLoggedIn, navigation }: { isLoggedIn?: boolean; navigation?: any }) {
     const insets = useSafeAreaInsets();
     const statusTabs = ['All', 'Unread'];
-    
+
     // Comprehensive labels for all available notification types from the API
     const CATEGORIES = [
         { label: 'Every Category', value: 'All' },
@@ -71,10 +71,10 @@ export function NotificationScreen({ isLoggedIn, navigation }: { isLoggedIn?: bo
 
     const showConfirm = (cfg: ConfirmConfig) => setConfirmModal(cfg);
     const dismissConfirm = () => setConfirmModal(null);
-    
+
     // API Hooks
-    const { data, isLoading, isFetching, refetch } = useGetNotificationsQuery({ 
-        page, 
+    const { data, isLoading, isFetching, refetch } = useGetNotificationsQuery({
+        page,
         limit: 20,
         isRead: activeStatus === 'Unread' ? false : undefined,
         type: activeCategory === 'All' ? undefined : activeCategory as any,
@@ -88,7 +88,7 @@ export function NotificationScreen({ isLoggedIn, navigation }: { isLoggedIn?: bo
     const dispatch = useDispatch();
 
     const notifications = data?.notifications || [];
-    
+
     const handleMarkAllRead = () => {
         showConfirm({
             title: 'Mark all as read',
@@ -97,10 +97,17 @@ export function NotificationScreen({ isLoggedIn, navigation }: { isLoggedIn?: bo
             onConfirm: async () => {
                 try {
                     const response = await markAllRead().unwrap() as any;
-                    dispatch(showToast({
-                        message: response?.message || 'All notifications marked as read',
-                        type: response?.status ? 'success' : 'error'
-                    }));
+                    if(response?.status){
+                        dispatch(showToast({
+                            message: response?.message || 'All notifications marked as read',
+                            type: 'success'
+                        }));
+                    }else{
+                        dispatch(showToast({
+                            message: response?.message || 'Failed to mark all notifications as read',
+                            type: 'error'
+                        }));
+                    }
                 } catch (error: any) {
                     dispatch(showToast({ message: error?.data?.message || 'Failed to mark as read', type: 'error' }));
                 }
@@ -111,7 +118,7 @@ export function NotificationScreen({ isLoggedIn, navigation }: { isLoggedIn?: bo
     const handleNotificationPress = async (item: Notification) => {
         // Mark as read silently
         if (!item.isRead) {
-            try { await markRead({ ids: [item.id] }).unwrap() as any; } catch (_) {}
+            try { await markRead({ ids: [item.id] }).unwrap() as any; } catch (_) { }
         }
 
         // Navigate to topic if it's a mention or comment
@@ -140,10 +147,18 @@ export function NotificationScreen({ isLoggedIn, navigation }: { isLoggedIn?: bo
             onConfirm: async () => {
                 try {
                     const response = await deleteNotification(id).unwrap() as any;
-                    dispatch(showToast({
-                        message: response?.message || 'Notification deleted',
-                        type: response?.status ? 'success' : 'error'
-                    }));
+                    if(response?.status){
+                        dispatch(showToast({
+                            message: response?.message || 'Notification deleted',
+                            type: 'success'
+                        }));
+                    }
+                    else{
+                        dispatch(showToast({
+                            message: response?.message || 'Failed to delete notification',
+                            type: 'error'
+                        }));
+                    }
                 } catch (error: any) {
                     dispatch(showToast({ message: error?.data?.message || 'Failed to delete', type: 'error' }));
                 }
@@ -164,7 +179,7 @@ export function NotificationScreen({ isLoggedIn, navigation }: { isLoggedIn?: bo
 
     const NotificationSkeleton = () => {
         const shimmerAnim = useMemo(() => new Animated.Value(0), []);
-        
+
         React.useEffect(() => {
             Animated.loop(
                 Animated.sequence([
@@ -203,19 +218,19 @@ export function NotificationScreen({ isLoggedIn, navigation }: { isLoggedIn?: bo
         const startTime = hasMeta?.startTime;
 
         return (
-            <TouchableOpacity 
+            <TouchableOpacity
                 style={[styles.item, !item.isRead && styles.itemUnread]}
                 onPress={() => handleNotificationPress(item)}
             >
                 {/* Left Strip */}
                 <View style={[styles.leftStrip, { backgroundColor: item.isRead ? '#e5e7eb' : '#0e7490' }]} />
-                
+
                 <View style={styles.itemInner}>
                     <View style={styles.itemMainRow}>
                         <View style={styles.iconBox}>
                             {getIcon(item.type)}
                         </View>
-                        
+
                         <View style={styles.itemHeaderContent}>
                             <View style={styles.itemTitleRow}>
                                 <Text style={[styles.itemTitle, !item.isRead && styles.textBold]}>
@@ -341,7 +356,7 @@ export function NotificationScreen({ isLoggedIn, navigation }: { isLoggedIn?: bo
                             ))}
                         </View>
 
-                        <TouchableOpacity 
+                        <TouchableOpacity
                             style={styles.categoryDropdown}
                             onPress={() => setShowCategoryDropdown(!showCategoryDropdown)}
                         >
@@ -357,8 +372,8 @@ export function NotificationScreen({ isLoggedIn, navigation }: { isLoggedIn?: bo
                         <View style={styles.dropdownMenu}>
                             <ScrollView style={{ maxHeight: 300 }}>
                                 {CATEGORIES.map((cat) => (
-                                    <TouchableOpacity 
-                                        key={cat.value} 
+                                    <TouchableOpacity
+                                        key={cat.value}
                                         style={[styles.dropdownItem, activeCategory === cat.value && styles.dropdownItemActive]}
                                         onPress={() => handleCategoryChange(cat.value)}
                                     >
@@ -371,14 +386,14 @@ export function NotificationScreen({ isLoggedIn, navigation }: { isLoggedIn?: bo
                         </View>
                     )}
 
-                    <ScrollView 
-                        horizontal 
-                        showsHorizontalScrollIndicator={false} 
+                    <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
                         contentContainerStyle={styles.actionBarScroll}
                         style={styles.actionBarWrapper}
                     >
-                        <TouchableOpacity 
-                            onPress={(data?.unreadCount || 0) > 0 ? handleMarkAllRead : undefined} 
+                        <TouchableOpacity
+                            onPress={(data?.unreadCount || 0) > 0 ? handleMarkAllRead : undefined}
                             style={[
                                 styles.headerActionBtn,
                                 (data?.unreadCount || 0) === 0 && { opacity: 0.5, backgroundColor: '#f3f4f6' }
@@ -388,14 +403,14 @@ export function NotificationScreen({ isLoggedIn, navigation }: { isLoggedIn?: bo
                             <CheckCheck size={16} color={(data?.unreadCount || 0) > 0 ? '#0e7490' : '#9ca3af'} />
                             <Text style={[styles.headerActionText, (data?.unreadCount || 0) === 0 && { color: '#9ca3af' }]}>Mark all as read</Text>
                         </TouchableOpacity>
-                        
+
                         <TouchableOpacity onPress={handleRefresh} style={styles.headerActionBtn}>
                             <RefreshCcw size={16} color="#0e7490" />
                             <Text style={styles.headerActionText}>Refresh</Text>
                         </TouchableOpacity>
 
-                        <TouchableOpacity 
-                            onPress={notifications.length > 0 ? handleClearAll : undefined} 
+                        <TouchableOpacity
+                            onPress={notifications.length > 0 ? handleClearAll : undefined}
                             style={[
                                 styles.headerActionBtn,
                                 notifications.length === 0 && { opacity: 0.5, backgroundColor: '#f3f4f6' }
@@ -484,11 +499,11 @@ export function NotificationScreen({ isLoggedIn, navigation }: { isLoggedIn?: bo
                         <Text style={styles.modalTitle}>{confirmModal?.title}</Text>
                         <Text style={styles.modalMessage}>{confirmModal?.message}</Text>
                         <View style={styles.modalActions}>
-                            <TouchableOpacity style={styles.modalCancelBtn} onPress={dismissConfirm}>
+                            <TouchableOpacity style={[styles.modalCancelBtn, { flex: 1 }]} onPress={dismissConfirm}>
                                 <Text style={styles.modalCancelText}>Cancel</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
-                                style={[styles.modalConfirmBtn, confirmModal?.danger && styles.modalDangerBtn]}
+                                style={[styles.modalConfirmBtn, confirmModal?.danger && styles.modalDangerBtn, { flex: 1 }]}
                                 onPress={() => {
                                     dismissConfirm();
                                     confirmModal?.onConfirm();
@@ -993,11 +1008,11 @@ const styles = StyleSheet.create({
         gap: 12,
     },
     modalCancelBtn: {
-        flex: 1,
         paddingVertical: 12,
         borderRadius: 10,
         backgroundColor: '#f1f5f9',
         alignItems: 'center',
+        justifyContent: 'center',
     },
     modalCancelText: {
         fontSize: 14,
@@ -1005,11 +1020,11 @@ const styles = StyleSheet.create({
         color: '#374151',
     },
     modalConfirmBtn: {
-        flex: 1,
         paddingVertical: 12,
         borderRadius: 10,
         backgroundColor: '#0e7490',
         alignItems: 'center',
+        justifyContent: 'center',
     },
     modalDangerBtn: {
         backgroundColor: '#ef4444',

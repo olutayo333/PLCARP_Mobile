@@ -67,7 +67,6 @@ export function ForgotPasswordScreen({ onBackToLogin }: { onBackToLogin: () => v
 
     const handleSendToken = async () => {
         if (!validateStep1()) return;
-
         try {
           const response = await sendCodeApi({ email }).unwrap() as any;
           if (response.status) {

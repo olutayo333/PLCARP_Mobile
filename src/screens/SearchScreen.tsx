@@ -85,10 +85,17 @@ export function SearchScreen() {
                     onConfirm: async () => {
                         try {
                             const response = await unsubscribe(community.id).unwrap() as any;
-                            dispatch(showToast({
-                                message: response?.message || 'Left community successfully',
-                                type: response?.status ? 'success' : 'error'
-                            }));
+                            if (response?.status) {
+                                dispatch(showToast({
+                                    message: response?.message || 'Left community successfully',
+                                    type: 'success'
+                                }));
+                            } else {
+                                dispatch(showToast({
+                                    message: response?.message || 'Failed to leave community',
+                                    type: 'error'
+                                }));
+                            }
                         } catch (err: any) {
                             dispatch(showToast({ message: err?.data?.message || 'Failed to leave community', type: 'error' }));
                         }
@@ -96,10 +103,17 @@ export function SearchScreen() {
                 });
             } else {
                 const response = await subscribe(community.id).unwrap() as any;
-                dispatch(showToast({
-                    message: response?.message || 'Joined community successfully',
-                    type: response?.status ? 'success' : 'error'
-                }));
+                if (response?.status) {
+                    dispatch(showToast({
+                        message: response?.message || 'Joined community successfully',
+                        type: 'success'
+                    }));
+                } else {
+                    dispatch(showToast({
+                        message: response?.message || 'Failed to join community',
+                        type: 'error'
+                    }));
+                }
             }
         } catch (err: any) {
             const serverError = err?.data?.message || 'Failed to update subscription';
@@ -131,66 +145,83 @@ export function SearchScreen() {
         { skip: !debouncedSearch }
     );
 
-    const recentSearches = ['Policy Advocacy', 'Leadership', 'Human Resources', 'Environmental'];
-    const trendingTopics = [
-        'Communication and Advocacy strategies for rural NGOs',
-        'Communication and Advocacy strategies for rural NGOs',
-        'Communication and Advocacy strategies for rural NGOs'
-    ];
+    // Fetch Trending Topics for Initial View
+    const { data: trendingData, isLoading: isLoadingTrending } = useGetGlobalTopicsQuery(
+        { filter: 'TRENDING', limit: 3 },
+        { skip: !!searchQuery }
+    );
+
+    // Fetch Popular Communities for Initial View
+    const { data: popularData, isLoading: isLoadingPopular } = useGetCommunitiesQuery(
+        { limit: 4 },
+        { skip: !!searchQuery }
+    );
 
     const renderInitialView = () => (
         <ScrollView style={styles.searchInitial}>
-            <View style={styles.searchSection}>
-                <View style={styles.sectionHeader}>
-                    <Text style={styles.sectionTitle}>RECENT SEARCHES</Text>
-                    <TouchableOpacity><Text style={styles.clearAll}>Clear all</Text></TouchableOpacity>
-                </View>
-                {recentSearches.map(item => (
-                    <View key={item} style={styles.recentItem}>
-                        <Text style={styles.recentText}>{item}</Text>
-                        <X size={16} color="#9ca3af" />
-                    </View>
-                ))}
-            </View>
-
+            {/* Trending Section */}
             <View style={styles.searchSection}>
                 <Text style={styles.sectionTitle}>TRENDING IN FORUM</Text>
-                {trendingTopics.map((item, idx) => (
-                    <View key={idx} style={styles.trendingItem}>
-                        <View style={styles.trendingIcon}><Text style={styles.trendingIconText}>AJ</Text></View>
-                        <View style={styles.trendingContent}>
-                            <Text style={styles.trendingTitle} numberOfLines={1}>{item}</Text>
-                            <View style={styles.trendingMeta}>
-                                <Share2 size={12} color="#9ca3af" />
-                                <View style={styles.statItemRow}>
-                                    <MessageCircle size={12} color="#9ca3af" />
-                                    <Text style={styles.statTextSmall}>8</Text>
-                                </View>
-                                <View style={styles.statItemRow}>
-                                    <Eye size={12} color="#9ca3af" />
-                                    <Text style={styles.statTextSmall}>124</Text>
+                {isLoadingTrending ? (
+                    <ActivityIndicator style={{ padding: 20 }} color="#0e7490" />
+                ) : (
+                    trendingData?.topics?.map((topic: any) => (
+                        <TouchableOpacity
+                            key={topic.id}
+                            style={styles.trendingItem}
+                            onPress={() => navigation.navigate('TopicDetail', { communityId: topic.communityId, topicId: topic.id })}
+                        >
+                            <View style={styles.trendingIcon}>
+                                <Text style={styles.trendingIconText}>
+                                    {(topic.author?.fullName || 'A').charAt(0)}
+                                </Text>
+                            </View>
+                            <View style={styles.trendingContent}>
+                                <Text style={styles.trendingTitle} numberOfLines={1}>{topic.title}</Text>
+                                <View style={styles.trendingMeta}>
+                                    <View style={styles.statItemRow}>
+                                        <MessageCircle size={12} color="#9ca3af" />
+                                        <Text style={styles.statTextSmall}>{topic.commentCount || 0}</Text>
+                                    </View>
+                                    <View style={styles.statItemRow}>
+                                        <Eye size={12} color="#9ca3af" />
+                                        <Text style={styles.statTextSmall}>{topic.viewCount || 0}</Text>
+                                    </View>
                                 </View>
                             </View>
-                        </View>
-                    </View>
-                ))}
+                        </TouchableOpacity>
+                    ))
+                )}
+                {!isLoadingTrending && (!trendingData?.topics || trendingData.topics.length === 0) && (
+                    <Text style={styles.emptyTextSmaller}>No trending topics at the moment</Text>
+                )}
             </View>
+
+            {/* Popular Communities Section */}
             <View style={styles.searchSection}>
                 <Text style={styles.sectionTitle}>POPULAR COMMUNITIES</Text>
                 <View style={styles.popularCommunitiesList}>
-                    <CommunityCard
-                        community={{ id: '1', name: 'Policy Advocacy', category: 'Advocacy', memberCount: 124, topicCount: 8 } as any}
-                        isLoggedIn={isLoggedIn}
-                        onPress={() => handleCommunityAction({ id: '1', name: 'Policy Advocacy' })}
-                    />
-                    <CommunityCard
-                        community={{ id: '2', name: 'Communications for Advocacy', category: 'Advocacy', memberCount: 124, topicCount: 8 } as any}
-                        isLoggedIn={isLoggedIn}
-                        onPress={() => handleCommunityAction({ id: '2', name: 'Communications for Advocacy' })}
-                    />
+                    {isLoadingPopular ? (
+                        <ActivityIndicator style={{ padding: 20 }} color="#0e7490" />
+                    ) : (
+                        popularData?.communities?.map((community: any) => (
+                            <CommunityCard
+                                key={community.id}
+                                community={community}
+                                isLoggedIn={isLoggedIn}
+                                onPress={() => handleCommunityAction(community)}
+                            />
+                        ))
+                    )}
+                    {!isLoadingPopular && (!popularData?.communities || popularData.communities.length === 0) && (
+                        <Text style={styles.emptyTextSmaller}>No communities found</Text>
+                    )}
 
-                    <TouchableOpacity style={styles.loadMoreBtn}>
-                        <Text style={styles.loadMoreBtnText}>Load more results</Text>
+                    <TouchableOpacity
+                        style={styles.loadMoreBtn}
+                        onPress={() => navigation.navigate('MainTabs' as any)}
+                    >
+                        <Text style={styles.loadMoreBtnText}>View all communities</Text>
                     </TouchableOpacity>
                 </View>
             </View>
@@ -502,6 +533,12 @@ const styles = StyleSheet.create({
     emptyText: {
         fontSize: 16,
         color: '#9ca3af',
+    },
+    emptyTextSmaller: {
+        fontSize: 12,
+        color: '#9ca3af',
+        textAlign: 'center',
+        padding: 20,
     },
     popularCommunitiesList: {
         gap: 12,

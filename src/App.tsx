@@ -21,7 +21,7 @@ const OnboardingScreen = React.lazy(() =>
 function InlineSplash() {
   return (
     <View style={styles.centered}>
-      <Text style={{ fontSize: 28, fontWeight: 'bold', color: '#0e7490' }}>PLCAP v2</Text>
+      <Text style={{ fontSize: 28, fontWeight: 'bold', color: '#0e7490' }}>PLRCAP v2</Text>
 
       <Text style={{ color: '#6b7280', marginTop: 8 }}>Loading...</Text>
       <ActivityIndicator color="#0e7490" style={{ marginTop: 16 }} />

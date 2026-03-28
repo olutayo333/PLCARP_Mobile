@@ -15,6 +15,8 @@ import {
     ShieldCheck,
     ChevronDown,
     X,
+    Edit2,
+    Trash2,
 } from 'lucide-react-native';
 
 import {
@@ -27,6 +29,11 @@ import {
     useGetMentionsQuery,
     useSubscribeToCommunityMutation,
     useUnsubscribeFromCommunityMutation,
+    useGetOrganizationActivitiesQuery,
+    useGetMyOrganizationActivitiesQuery,
+    usePostOrganizationActivityMutation,
+    useUpdateOrganizationActivityMutation,
+    useDeleteOrganizationActivityMutation,
 } from '../services/communityApi';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '../store';
@@ -34,7 +41,6 @@ import { useGetUserProfileQuery } from '../services/profileApi';
 import { Skeleton } from '../components/common/Skeleton';
 import { TopicCard } from '../components/TopicCard';
 import { CommunityCard } from '../components/CommunityCard';
-import { ActivityCard } from '../components/ActivityCard';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../navigation/types';
@@ -92,10 +98,11 @@ export function FeedScreen({ route }: any) {
         }
     }, [route?.params?.initialSubTab]);
 
-    const [activeFilter, setActiveFilter] = useState('recents');
+    const [activeFilter, setActiveFilter] = useState('new');
     const [categorySearch, setCategorySearch] = useState('');
     const dispatch = useDispatch();
     const isLoggedIn = useSelector((state: RootState) => state.user.isLoggedIn);
+    const user = useSelector((state: RootState) => state.user.user);
 
     // Cross-platform modal state
     type ConfirmConfig = { title: string; message: string; confirmText: string; danger?: boolean; onConfirm: () => void };
@@ -110,6 +117,19 @@ export function FeedScreen({ route }: any) {
     const [isCommunityPickerVisible, setIsCommunityPickerVisible] = useState(false);
     const [communitySearch, setCommunitySearch] = useState('');
     const [debouncedCommunitySearch, setDebouncedCommunitySearch] = useState('');
+    const [selectedActivity, setSelectedActivity] = useState<any | null>(null);
+
+    // Activity Management State
+    const [isActivityFormVisible, setIsActivityFormVisible] = useState(false);
+    const [activityFormMode, setActivityFormMode] = useState<'create' | 'edit'>('create');
+    const [activityFormData, setActivityFormData] = useState({
+        sector: '',
+        who: '',
+        where: '',
+        when: new Date().getFullYear().toString(),
+        activity: '',
+        id: ''
+    });
 
     useEffect(() => {
         const timer = setTimeout(() => {
@@ -132,7 +152,7 @@ export function FeedScreen({ route }: any) {
         setEffectiveSearch('');
         setCategorySearch('');
         setCurrentPage(1);
-    }, [activeSubTab, selectedCommunityId]);
+    }, [activeSubTab, selectedCommunityId, activeFilter]);
 
     useEffect(() => {
         setCurrentPage(1);
@@ -145,6 +165,103 @@ export function FeedScreen({ route }: any) {
     const [subscribe] = useSubscribeToCommunityMutation();
     const [unsubscribe] = useUnsubscribeFromCommunityMutation();
 
+    const [postActivity, { isLoading: isPosting }] = usePostOrganizationActivityMutation();
+    const [updateActivity, { isLoading: isUpdating }] = useUpdateOrganizationActivityMutation();
+    const [deleteActivity] = useDeleteOrganizationActivityMutation();
+
+    const handleOpenCreateActivity = () => {
+        setActivityFormMode('create');
+        setActivityFormData({ sector: '', who: '', where: '', when: new Date().getFullYear().toString(), activity: '', id: '' });
+        setIsActivityFormVisible(true);
+    };
+
+    const handleOpenEditActivity = (item: any) => {
+        setActivityFormMode('edit');
+        setActivityFormData({
+            sector: item.sector || '',
+            who: item.who || '',
+            where: item.where || '',
+            when: (item.when || new Date().getFullYear()).toString(),
+            activity: item.activity || '',
+            id: item.id
+        });
+        setIsActivityFormVisible(true);
+    };
+
+    const handleConfirmDeleteActivity = (id: string, e?: any) => {
+        if (e && e.stopPropagation) e.stopPropagation();
+        showConfirm({
+            title: 'Delete Activity',
+            message: 'Are you sure you want to delete this activity record?',
+            confirmText: 'Delete',
+            danger: true,
+            onConfirm: async () => {
+                try {
+                    const response = await deleteActivity(id).unwrap();
+                    if(response?.status){
+                        dispatch(showToast({ message: response?.message || 'Activity deleted successfully', type: 'success' }));
+                    }else{
+                        dispatch(showToast({ message: response?.message || 'Failed to delete activity', type: 'error' }));
+                    }
+                } catch (err: any) {
+                    dispatch(showToast({ message: err.data?.message || 'Failed to delete activity', type: 'error' }));
+                }
+            }
+        });
+    };
+
+    const handleSubmitActivity = async () => {
+        const { sector, who, where, when, activity } = activityFormData;
+        if (!sector.trim()) {
+            dispatch(showToast({ message: 'Please specify the sector', type: 'error' }));
+            return;
+        }
+        if (!who.trim()) {
+            dispatch(showToast({ message: 'Please specify target beneficiaries (Who)', type: 'error' }));
+            return;
+        }
+        if (!where.trim()) {
+            dispatch(showToast({ message: 'Please specify the location (Where)', type: 'error' }));
+            return;
+        }
+        if (!when.trim()) {
+            dispatch(showToast({ message: 'Please provide the year (When)', type: 'error' }));
+            return;
+        }
+        if (!activity.trim()) {
+            dispatch(showToast({ message: 'Please provide an activity description', type: 'error' }));
+            return;
+        }
+
+        const payload = {
+            sector: sector.trim(),
+            who: who.trim(),
+            where: where.trim(),
+            when: parseInt(when),
+            activity: activity.trim()
+        };
+        try {
+            if (activityFormMode === 'create') {
+                const response = await postActivity(payload).unwrap();
+                if (response.status) {
+                    dispatch(showToast({ message: response.message || 'Activity posted successfully', type: 'success' }));
+                } else {
+                    dispatch(showToast({ message: response.message || 'Failed to post activity', type: 'error' }));
+                }
+            } else {
+                const response = await updateActivity({ id: activityFormData.id, data: payload }).unwrap();
+                if (response.status) {
+                    dispatch(showToast({ message: response.message || 'Activity updated successfully', type: 'success' }));
+                } else {
+                    dispatch(showToast({ message: response.message || 'Failed to update activity', type: 'error' }));
+                }
+            }
+            setIsActivityFormVisible(false);
+        } catch (err: any) {
+            dispatch(showToast({ message: err.data?.message || 'Failed to save activity', type: 'error' }));
+        }
+    };
+
     const handleCommunityAction = async (community: any) => {
         if (!isLoggedIn) {
             showConfirm({
@@ -155,7 +272,6 @@ export function FeedScreen({ route }: any) {
             });
             return;
         }
-
         try {
             if (community.joined) {
                 showConfirm({
@@ -166,10 +282,11 @@ export function FeedScreen({ route }: any) {
                     onConfirm: async () => {
                         try {
                             const response = await unsubscribe(community.id).unwrap() as any;
-                            dispatch(showToast({
-                                message: response?.message || 'Left community successfully',
-                                type: response?.status ? 'success' : 'error'
-                            }));
+                            if (response.status) {
+                                dispatch(showToast({ message: response.message || 'Left community successfully', type: 'success' }));
+                            } else {
+                                dispatch(showToast({ message: response.message || 'Failed to leave community', type: 'error' }));
+                            }
                         } catch (err: any) {
                             dispatch(showToast({ message: err?.data?.message || 'Failed to leave community', type: 'error' }));
                         }
@@ -177,10 +294,11 @@ export function FeedScreen({ route }: any) {
                 });
             } else {
                 const response = await subscribe(community.id).unwrap() as any;
-                dispatch(showToast({
-                    message: response?.message || 'Joined community successfully',
-                    type: response?.status ? 'success' : 'error'
-                }));
+                if (response?.status) {
+                    dispatch(showToast({ message: response?.message || 'Joined community successfully', type: 'success' }));
+                } else {
+                    dispatch(showToast({ message: response?.message || 'Failed to join community', type: 'error' }));
+                }
             }
         } catch (err: any) {
             const serverError = err?.data?.message || 'Failed to update subscription';
@@ -190,32 +308,26 @@ export function FeedScreen({ route }: any) {
 
     const { data: communitiesData } = useGetCommunitiesQuery({});
 
-    const {
-        data: globalTopicsData,
-        isLoading: isLoadingGlobal,
-        isFetching: isFetchingGlobal,
-        refetch: refetchGlobal
-    } = useGetGlobalTopicsQuery(
+    const topicFilterParam = activeFilter === 'new' ? undefined : (activeFilter === 'trending' ? 'TRENDING' : 'RECENT');
+
+    const { data: globalTopicsData, isLoading: isLoadingGlobal, isFetching: isFetchingGlobal, refetch: refetchGlobal } = useGetGlobalTopicsQuery(
         {
             search: combinedSearch,
             page: currentPage,
-            limit: ITEMS_PER_PAGE
+            limit: ITEMS_PER_PAGE,
+            filter: topicFilterParam
         },
         { skip: activeSubTab !== 'topics' || selectedCommunityId !== null }
     );
 
-    const {
-        data: communityTopicsData,
-        isLoading: isLoadingCommunityTopics,
-        isFetching: isFetchingCommunity,
-        refetch: refetchCommunity
-    } = useGetCommunityTopicsQuery(
+    const { data: communityTopicsData, isLoading: isLoadingCommunityTopics, isFetching: isFetchingCommunity, refetch: refetchCommunity } = useGetCommunityTopicsQuery(
         {
             communityId: selectedCommunityId || '',
             filters: {
                 search: combinedSearch,
                 page: currentPage,
-                limit: ITEMS_PER_PAGE
+                limit: ITEMS_PER_PAGE,
+                filter: topicFilterParam
             }
         },
         { skip: !selectedCommunityId || activeSubTab !== 'topics' }
@@ -224,8 +336,8 @@ export function FeedScreen({ route }: any) {
     const { data: generalAnalytics } = useGetGeneralAnalyticsQuery(undefined, { skip: !isLoggedIn || selectedCommunityId !== null });
     const { data: communityAnalytics } = useGetCommunityAnalyticsQuery(selectedCommunityId || '', { skip: !selectedCommunityId });
     const { data: userProfile } = useGetUserProfileQuery(undefined, { skip: !isLoggedIn });
-    const { data: subscriptions, refetch: refetchSubscriptions } = useGetMySubscriptionsQuery(undefined, { skip: !isLoggedIn || activeSubTab !== 'subscribed' });
-    const { data: mentions, isLoading: isLoadingMentions, refetch: refetchMentions } = useGetMentionsQuery(undefined, { skip: !isLoggedIn || activeSubTab !== 'mentions' });
+    const { data: subscriptions, refetch: refetchSubscriptions, isLoading: isLoadingSubscriptions, isFetching: isFetchingSubscriptions } = useGetMySubscriptionsQuery(undefined, { skip: !isLoggedIn || activeSubTab !== 'subscribed' });
+    const { data: mentions, isLoading: isLoadingMentions, isFetching: isFetchingMentions, refetch: refetchMentions } = useGetMentionsQuery(undefined, { skip: !isLoggedIn || activeSubTab !== 'mentions' });
 
     const {
         data: communitiesListData,
@@ -237,6 +349,30 @@ export function FeedScreen({ route }: any) {
         page: currentPage,
         limit: ITEMS_PER_PAGE
     }, { skip: activeSubTab !== 'communities' });
+
+    const {
+        data: publicActivitiesData,
+        isLoading: isLoadingPublicActivities,
+        isFetching: isFetchingPublicActivities,
+        refetch: refetchPublicActivities
+    } = useGetOrganizationActivitiesQuery({
+        search: effectiveSearch,
+        page: currentPage,
+        limit: ITEMS_PER_PAGE
+    }, { skip: activeSubTab !== 'activities' || (isLoggedIn && userProfile?.role === 'NGO_MEMBER') });
+
+    const {
+        data: myActivitiesData,
+        isLoading: isLoadingMyActivities,
+        isFetching: isFetchingMyActivities,
+        refetch: refetchMyActivities
+    } = useGetMyOrganizationActivitiesQuery({
+        search: effectiveSearch,
+        page: currentPage,
+        limit: ITEMS_PER_PAGE
+    }, { skip: activeSubTab !== 'activities' || userProfile?.role !== 'NGO_MEMBER' });
+
+    const isNgoMember = isLoggedIn && userProfile?.role === 'NGO_MEMBER';
 
     const {
         data: communitySearchResults,
@@ -251,17 +387,27 @@ export function FeedScreen({ route }: any) {
         return communitiesData?.communities?.find((c: any) => c.id === selectedCommunityId);
     }, [selectedCommunityId, communitiesData]);
 
-    const isFetching = activeSubTab === 'communities' ? isFetchingCommunitiesList : (selectedCommunityId ? isFetchingCommunity : isFetchingGlobal);
+    const isFetching: boolean = activeSubTab === 'communities' ? (isFetchingCommunitiesList ?? false) :
+        activeSubTab === 'mentions' ? (isFetchingMentions ?? false) :
+            activeSubTab === 'subscribed' ? (isFetchingSubscriptions ?? false) :
+                activeSubTab === 'activities' ? (isNgoMember ? (isFetchingMyActivities ?? false) : (isFetchingPublicActivities ?? false)) :
+                    (selectedCommunityId ? (isFetchingCommunity ?? false) : (isFetchingGlobal ?? false));
 
-    const isLoading = activeSubTab === 'communities' ? isLoadingCommunitiesList : (selectedCommunityId ? (isLoadingCommunityTopics) : isLoadingGlobal);
+    const isLoading: boolean = activeSubTab === 'communities' ? (isLoadingCommunitiesList ?? false) :
+        activeSubTab === 'mentions' ? (isLoadingMentions ?? false) :
+            activeSubTab === 'subscribed' ? (isLoadingSubscriptions ?? false) :
+                activeSubTab === 'activities' ? (isNgoMember ? (isLoadingMyActivities ?? false) : (isLoadingPublicActivities ?? false)) :
+                    (selectedCommunityId ? (isLoadingCommunityTopics ?? false) : (isLoadingGlobal ?? false));
     const topicsData = selectedCommunityId ? communityTopicsData : globalTopicsData;
-    const listData = activeSubTab === 'communities' ? communitiesListData : topicsData;
+    const listData = activeSubTab === 'communities' ? communitiesListData :
+        activeSubTab === 'activities' ? (isNgoMember ? myActivitiesData : publicActivitiesData) :
+            topicsData;
     const topics = topicsData?.topics;
     const refetch = () => {
         if (activeSubTab === 'communities') return refetchCommunitiesList();
         if (activeSubTab === 'mentions') return refetchMentions();
         if (activeSubTab === 'subscribed') return refetchSubscriptions();
-        if (activeSubTab === 'activities') return; // Mock data, nothing to refetch
+        if (activeSubTab === 'activities') return isNgoMember ? refetchMyActivities() : refetchPublicActivities();
         return selectedCommunityId ? refetchCommunity() : refetchGlobal();
     };
 
@@ -331,12 +477,21 @@ export function FeedScreen({ route }: any) {
                     <Search size={20} color="#9ca3af" />
                     <TextInput
                         style={[styles.searchInput, Platform.OS === 'web' ? { outlineStyle: 'none' } as any : null]}
-                        placeholder="Search topics..."
+                        placeholder={`Search ${activeSubTab === 'communities' ? 'communities' : activeSubTab === 'activities' ? 'activities' : 'topics'}...`}
                         value={searchQuery}
                         onChangeText={setSearchQuery}
                         placeholderTextColor="#9ca3af"
                     />
                 </View>
+                {activeSubTab === 'activities' && isNgoMember && (
+                    <TouchableOpacity
+                        style={styles.postActivityBtn}
+                        onPress={handleOpenCreateActivity}
+                    >
+                        <Plus size={18} color="#fff" />
+                        <Text style={styles.postActivityBtnText}>Post</Text>
+                    </TouchableOpacity>
+                )}
             </View>
 
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.subTabs} contentContainerStyle={styles.subTabsContent}>
@@ -358,7 +513,7 @@ export function FeedScreen({ route }: any) {
             {activeSubTab === 'topics' && isLoggedIn && (
                 <View style={styles.filtersContainer}>
                     <View style={styles.filterRow}>
-                        {['Recents', 'Trending'].map((filter) => (
+                        {['New', 'Recent', 'Trending'].map((filter) => (
                             <TouchableOpacity
                                 key={filter}
                                 style={[styles.filterPill, activeFilter === filter.toLowerCase() && styles.filterPillActive]}
@@ -370,25 +525,6 @@ export function FeedScreen({ route }: any) {
                             </TouchableOpacity>
                         ))}
                     </View>
-                </View>
-            )}
-
-            {activeSubTab === 'topics' && !isLoggedIn && (
-                <View style={styles.filtersContainer}>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={Platform.OS === 'web'} style={styles.categoryScroller} contentContainerStyle={styles.categoryScrollerContent}>
-                        {categoryFilters.map((cat) => (
-                            <TouchableOpacity
-                                key={cat.name}
-                                style={[styles.categoryPill, categorySearch === cat.name && { backgroundColor: cat.bg, borderColor: cat.color }]}
-                                onPress={() => setCategorySearch(prev => prev === cat.name ? '' : cat.name)}
-                            >
-                                <cat.icon size={14} color={categorySearch === cat.name ? cat.color : '#6b7280'} />
-                                <Text style={[styles.categoryPillText, categorySearch === cat.name && { color: cat.color, fontWeight: 'bold' }]}>
-                                    {cat.name}
-                                </Text>
-                            </TouchableOpacity>
-                        ))}
-                    </ScrollView>
                 </View>
             )}
         </View>
@@ -485,40 +621,11 @@ export function FeedScreen({ route }: any) {
         </View>
     );
 
-    const mockActivities = [
-        {
-            id: '1',
-            topicTitle: 'Communication and Advocacy strategies f...',
-            authorName: 'ASomebody',
-            date: 'Mar 15, 2023',
-            body: 'This is replying the main post',
-            likes: 1
-        },
-        {
-            id: '2',
-            topicTitle: 'Communication and Advocacy strategies f...',
-            authorName: 'ASomebody',
-            date: 'Mar 15, 2023',
-            body: 'This is replying the main post',
-            likes: 1
-        }
-    ];
-
     const renderActivities = () => {
         return null;
     };
 
-    const renderTrendingEmpty = () => (
-        <View style={styles.trendingEmptyContainer}>
-            <View style={styles.trendingEmptyCircle}>
-                <TrendingUp size={40} color="#4f46e5" />
-            </View>
-            <Text style={styles.trendingEmptyTitle}>Trending topics coming soon!</Text>
-            <Text style={styles.trendingEmptySub}>
-                We're building a new way to discover the most active discussions in our community. Stay tuned!
-            </Text>
-        </View>
-    );
+    const renderTrendingEmpty = () => null;
 
     const FeedSkeleton = () => (
         <View style={{ padding: 16 }}>
@@ -559,7 +666,7 @@ export function FeedScreen({ route }: any) {
 
     return (
         <View style={[styles.screenContainer, { paddingTop: insets.top }]}>
-            {communitiesData?.communities && (
+            {communitiesData?.communities && activeSubTab !== 'activities' && (
                 <View style={[styles.communitySelectorContainer, !isLoggedIn && { borderBottomWidth: 0, paddingBottom: 0, backgroundColor: 'transparent' }]}>
                     {isLoggedIn ? (
                         <TouchableOpacity
@@ -591,11 +698,11 @@ export function FeedScreen({ route }: any) {
                 data={(isFetching && currentPage === 1)
                     ? []
                     : (activeSubTab === 'topics'
-                        ? (activeFilter === 'trending' ? [] : (topics || []))
+                        ? (topics || [])
                         : activeSubTab === 'communities' ? (communitiesListData?.communities || [])
                             : activeSubTab === 'mentions' ? (mentions || [])
                                 : activeSubTab === 'subscribed' ? (subscriptions || [])
-                                    : activeSubTab === 'activities' ? mockActivities
+                                    : activeSubTab === 'activities' ? (isNgoMember ? myActivitiesData?.activities : publicActivitiesData?.activities) || []
                                         : []
                     )
                 }
@@ -623,6 +730,53 @@ export function FeedScreen({ route }: any) {
                             />
                         );
                     }
+                    if (activeSubTab === 'mentions') {
+                        return renderMentionItem({ item });
+                    }
+                    if (activeSubTab === 'subscribed') {
+                        return renderSubscribedItem({ item });
+                    }
+                    if (activeSubTab === 'activities') {
+                        return (
+                            <TouchableOpacity
+                                style={styles.activityItem}
+                                onPress={() => setSelectedActivity(item)}
+                            >
+                                <View style={styles.activityIconBox}>
+                                    <MessageCircle size={20} color="#0e7490" />
+                                </View>
+                                <View style={{ flex: 1 }}>
+                                    <View style={styles.activityHeaderRow}>
+                                        <Text style={styles.activitySector}>{item.sector}</Text>
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                            <Text style={styles.activityYear}>{item.when}</Text>
+                                            {isNgoMember && (
+                                                <View style={styles.activityActions}>
+                                                    <TouchableOpacity
+                                                        onPress={(e) => {
+                                                            e.stopPropagation();
+                                                            handleOpenEditActivity(item);
+                                                        }}
+                                                        style={styles.activityActionBtn}
+                                                    >
+                                                        <Edit2 size={16} color="#0e7490" />
+                                                    </TouchableOpacity>
+                                                    <TouchableOpacity
+                                                        onPress={(e) => handleConfirmDeleteActivity(item.id, e)}
+                                                        style={styles.activityActionBtn}
+                                                    >
+                                                        <Trash2 size={16} color="#dc2626" />
+                                                    </TouchableOpacity>
+                                                </View>
+                                            )}
+                                        </View>
+                                    </View>
+                                    <Text style={styles.activityBody} numberOfLines={2}>{item.activity}</Text>
+                                    <Text style={styles.activityDate}>{item.createdAt ? new Date(item.createdAt).toLocaleDateString() : ''}</Text>
+                                </View>
+                            </TouchableOpacity>
+                        );
+                    }
                     return null;
                 }}
                 keyExtractor={(item) => item.id}
@@ -631,7 +785,7 @@ export function FeedScreen({ route }: any) {
                 refreshing={isFetching}
                 ListHeaderComponent={headerComponent}
                 ListFooterComponent={() => {
-                    if ((activeSubTab === 'topics' || activeSubTab === 'communities') && listData) {
+                    if ((activeSubTab === 'topics' || activeSubTab === 'communities' || activeSubTab === 'activities') && listData) {
                         const totalPages = (listData as any).totalPages || (listData as any).pages || 1;
                         return (
                             <View style={styles.paginationContainer}>
@@ -664,7 +818,6 @@ export function FeedScreen({ route }: any) {
                     return null;
                 }}
                 ListEmptyComponent={() => {
-                    if (activeFilter === 'trending' && activeSubTab === 'topics') return renderTrendingEmpty();
                     if (isLoading || isFetching) return <FeedSkeleton />;
 
                     if (activeSubTab === 'mentions') {
@@ -723,7 +876,7 @@ export function FeedScreen({ route }: any) {
                         <View style={styles.pickerSearchBox}>
                             <Search size={18} color="#9ca3af" />
                             <TextInput
-                                style={styles.pickerSearchInput}
+                                style={[styles.pickerSearchInput, Platform.OS === 'web' ? { outlineStyle: 'none' } as any : null]}
                                 placeholder="Search communities..."
                                 value={communitySearch}
                                 onChangeText={setCommunitySearch}
@@ -737,7 +890,6 @@ export function FeedScreen({ route }: any) {
                         </View>
 
                         <View style={[styles.pickerListContainer, { height: 400 }]}>
-
                             {isFetchingCommunitySearch && communitySearch !== '' ? (
                                 <ActivityIndicator style={{ marginTop: 20 }} color="#0e7490" />
                             ) : (
@@ -785,7 +937,6 @@ export function FeedScreen({ route }: any) {
                 animationType="fade"
                 onRequestClose={dismissConfirm}
             >
-
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalCard}>
                         <Text style={styles.modalTitle}>{confirmModal?.title}</Text>
@@ -807,7 +958,150 @@ export function FeedScreen({ route }: any) {
                     </View>
                 </View>
             </Modal>
-        </View>
+
+            {/* Activity Detail Modal */}
+            <Modal
+                visible={!!selectedActivity}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setSelectedActivity(null)}
+            >
+                <View style={styles.pickerOverlay}>
+                    <View style={styles.detailModalContent}>
+                        <View style={styles.detailModalHeader}>
+                            <Text style={styles.detailModalTitle}>Activity Details</Text>
+                            <TouchableOpacity onPress={() => setSelectedActivity(null)}>
+                                <X size={24} color="#6b7280" />
+                            </TouchableOpacity>
+                        </View>
+
+                        <ScrollView style={styles.detailModalBody}>
+                            <View style={styles.detailSection}>
+                                <Text style={styles.detailLabel}>SECTOR</Text>
+                                <Text style={styles.detailValue}>{selectedActivity?.sector}</Text>
+                            </View>
+
+                            <View style={styles.detailSection}>
+                                <Text style={styles.detailLabel}>WHO</Text>
+                                <Text style={styles.detailValue}>{selectedActivity?.who}</Text>
+                            </View>
+
+                            <View style={styles.detailSection}>
+                                <Text style={styles.detailLabel}>WHERE</Text>
+                                <Text style={styles.detailValue}>{selectedActivity?.where}</Text>
+                            </View>
+
+                            <View style={styles.detailSection}>
+                                <Text style={styles.detailLabel}>WHEN</Text>
+                                <Text style={styles.detailValue}>{selectedActivity?.when}</Text>
+                            </View>
+
+                            <View style={styles.detailSection}>
+                                <Text style={styles.detailLabel}>ACTIVITY DESCRIPTION</Text>
+                                <Text style={styles.detailValue}>{selectedActivity?.activity}</Text>
+                            </View>
+                        </ScrollView>
+
+                        <TouchableOpacity
+                            style={styles.detailModalCloseBtn}
+                            onPress={() => setSelectedActivity(null)}
+                        >
+                            <Text style={styles.detailModalCloseText}>Close</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* NGO Activity Form Modal */}
+            <Modal
+                visible={isActivityFormVisible}
+                transparent
+                animationType="slide"
+                onRequestClose={() => setIsActivityFormVisible(false)}
+            >
+                <View style={styles.pickerOverlay}>
+                    <View style={styles.pickerCard}>
+                        <View style={styles.pickerHeader}>
+                            <Text style={styles.pickerTitle}>
+                                {activityFormMode === 'create' ? 'Post New Activity' : 'Edit Activity'}
+                            </Text>
+                            <TouchableOpacity onPress={() => setIsActivityFormVisible(false)}>
+                                <X size={24} color="#6b7280" />
+                            </TouchableOpacity>
+                        </View>
+
+                        <ScrollView style={{ padding: 16 }}>
+                            <View style={styles.formGroup}>
+                                <Text style={styles.formLabel}>Sector <Text style={{ color: '#ef4444' }}>*</Text></Text>
+                                <TextInput
+                                    style={styles.formInput}
+                                    placeholder="e.g. Health, Education"
+                                    value={activityFormData.sector}
+                                    onChangeText={(val) => setActivityFormData({ ...activityFormData, sector: val })}
+                                />
+                            </View>
+
+                            <View style={styles.formGroup}>
+                                <Text style={styles.formLabel}>Who <Text style={{ color: '#ef4444' }}>*</Text></Text>
+                                <TextInput
+                                    style={styles.formInput}
+                                    placeholder="Target beneficiaries"
+                                    value={activityFormData.who}
+                                    onChangeText={(val) => setActivityFormData({ ...activityFormData, who: val })}
+                                />
+                            </View>
+
+                            <View style={styles.formGroup}>
+                                <Text style={styles.formLabel}>Where <Text style={{ color: '#ef4444' }}>*</Text></Text>
+                                <TextInput
+                                    style={styles.formInput}
+                                    placeholder="Location"
+                                    value={activityFormData.where}
+                                    onChangeText={(val) => setActivityFormData({ ...activityFormData, where: val })}
+                                />
+                            </View>
+
+                            <View style={styles.formGroup}>
+                                <Text style={styles.formLabel}>When (Year) <Text style={{ color: '#ef4444' }}>*</Text></Text>
+                                <TextInput
+                                    style={styles.formInput}
+                                    placeholder="2024"
+                                    keyboardType="numeric"
+                                    value={activityFormData.when}
+                                    onChangeText={(val) => setActivityFormData({ ...activityFormData, when: val })}
+                                />
+                            </View>
+
+                            <View style={styles.formGroup}>
+                                <Text style={styles.formLabel}>Activity Description <Text style={{ color: '#ef4444' }}>*</Text></Text>
+                                <TextInput
+                                    style={[styles.formInput, { height: 100, textAlignVertical: 'top' }]}
+                                    placeholder="Describe the activity..."
+                                    multiline
+                                    value={activityFormData.activity}
+                                    onChangeText={(val) => setActivityFormData({ ...activityFormData, activity: val })}
+                                />
+                            </View>
+
+                            <TouchableOpacity
+                                style={[styles.formSubmitBtn, (isPosting || isUpdating) && { opacity: 0.7 }]}
+                                onPress={handleSubmitActivity}
+                                disabled={isPosting || isUpdating}
+                            >
+                                {isPosting || isUpdating ? (
+                                    <ActivityIndicator size="small" color="#fff" />
+                                ) : (
+                                    <Text style={styles.formSubmitText}>
+                                        {activityFormMode === 'create' ? 'Post Activity' : 'Update Activity'}
+                                    </Text>
+                                )}
+                            </TouchableOpacity>
+                            <View style={{ height: 40 }} />
+                        </ScrollView>
+                    </View>
+                </View>
+            </Modal>
+        </View >
     );
 }
 
@@ -884,7 +1178,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 8,
     },
     subTab: {
-        paddingHorizontal: 16,
+        paddingHorizontal: 12,
         paddingVertical: 12,
         alignItems: 'center',
         justifyContent: 'center',
@@ -1082,10 +1376,7 @@ const styles = StyleSheet.create({
     },
     subscriptionStats: {
         flexDirection: 'row',
-        gap: 16,
-        borderTopWidth: 1,
-        borderTopColor: '#f3f4f6',
-        paddingTop: 12,
+        gap: 12,
     },
     subStat: {
         flexDirection: 'row',
@@ -1095,6 +1386,60 @@ const styles = StyleSheet.create({
     subStatText: {
         fontSize: 12,
         color: '#6b7280',
+    },
+    postActivityBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        backgroundColor: '#0e7490',
+        paddingHorizontal: 16,
+        paddingVertical: 10,
+        borderRadius: 12,
+        alignSelf: 'flex-start',
+        marginTop: 12,
+    },
+    postActivityBtnText: {
+        color: '#fff',
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    activityActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+    },
+    activityActionBtn: {
+        padding: 4,
+    },
+    formGroup: {
+        marginBottom: 16,
+    },
+    formLabel: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#374151',
+        marginBottom: 6,
+    },
+    formInput: {
+        backgroundColor: '#f9fafb',
+        borderWidth: 1,
+        borderColor: '#e5e7eb',
+        borderRadius: 8,
+        padding: 12,
+        fontSize: 16,
+        color: '#111827',
+    },
+    formSubmitBtn: {
+        backgroundColor: '#0e7490',
+        paddingVertical: 14,
+        borderRadius: 8,
+        alignItems: 'center',
+        marginTop: 8,
+    },
+    formSubmitText: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: 'bold',
     },
     activitiesContainer: {
         gap: 12,
@@ -1449,6 +1794,118 @@ const styles = StyleSheet.create({
         color: '#9ca3af',
         marginTop: 40,
         fontSize: 14,
+    },
+    activityItem: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        gap: 12,
+        backgroundColor: '#fff',
+        marginHorizontal: 16,
+        marginBottom: 12,
+        padding: 16,
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: '#f1f5f9',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 6,
+        elevation: 2,
+    },
+    activityIconBox: {
+        width: 40,
+        height: 40,
+        borderRadius: 12,
+        backgroundColor: '#f0f9ff',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    activityTitle: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: '#111827',
+        marginBottom: 4,
+    },
+    activityBody: {
+        fontSize: 13,
+        color: '#6b7280',
+        lineHeight: 18,
+        marginBottom: 6,
+    },
+    activityDate: {
+        fontSize: 12,
+        color: '#9ca3af',
+    },
+    activityHeaderRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    activitySector: {
+        fontSize: 11,
+        fontWeight: 'bold',
+        color: '#0e7490',
+        backgroundColor: '#ecfeff',
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        borderRadius: 6,
+        overflow: 'hidden',
+    },
+    activityYear: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: '#6b7280',
+    },
+    detailModalContent: {
+        backgroundColor: '#fff',
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
+        maxHeight: '90%',
+    },
+    detailModalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: 24,
+        borderBottomWidth: 1,
+        borderBottomColor: '#f1f5f9',
+    },
+    detailModalTitle: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        color: '#111827',
+    },
+    detailModalBody: {
+        padding: 24,
+    },
+    detailSection: {
+        marginBottom: 24,
+    },
+    detailLabel: {
+        fontSize: 11,
+        fontWeight: 'bold',
+        color: '#9ca3af',
+        letterSpacing: 1,
+        marginBottom: 8,
+    },
+    detailValue: {
+        fontSize: 15,
+        color: '#374151',
+        lineHeight: 22,
+    },
+    detailModalCloseBtn: {
+        margin: 24,
+        marginTop: 0,
+        paddingVertical: 16,
+        borderRadius: 12,
+        backgroundColor: '#f3f4f6',
+        alignItems: 'center',
+    },
+    detailModalCloseText: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: '#374151',
     },
 });
 

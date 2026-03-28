@@ -65,10 +65,17 @@ export function CommunitiesScreen() {
                     onConfirm: async () => {
                         try {
                             const response = await unsubscribe(community.id).unwrap() as any;
-                            dispatch(showToast({
-                                message: response?.message || 'Left community successfully',
-                                type: response?.status ? 'success' : 'error'
-                            }));
+                            if (response?.status){
+                                dispatch(showToast({
+                                    message: response?.message || 'Left community successfully',
+                                    type: 'success'
+                                }));
+                            }else{
+                                dispatch(showToast({
+                                    message: response?.message || 'Failed to leave community',
+                                    type: 'error'
+                                }));
+                            }
                         } catch (err: any) {
                             dispatch(showToast({ message: err?.data?.message || 'Failed to leave community', type: 'error' }));
                         }
@@ -76,10 +83,17 @@ export function CommunitiesScreen() {
                 });
             } else {
                 const response = await subscribe(community.id).unwrap() as any;
-                dispatch(showToast({
-                    message: response?.message || 'Joined community successfully',
-                    type: response?.status ? 'success' : 'error'
-                }));
+                if(response?.status){
+                    dispatch(showToast({
+                        message: response?.message || 'Joined community successfully',
+                        type: 'success'
+                    }));
+                }else{
+                    dispatch(showToast({
+                        message: response?.message || 'Failed to join community',
+                        type: 'error'
+                    }));
+                }
             }
         } catch (err: any) {
             const serverError = err?.data?.message || 'Failed to update subscription';

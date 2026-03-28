@@ -158,7 +158,46 @@ export interface CommunityMention {
   commentId: string;
   comment?: any;
   createdAt: string;
-  communityId: string
+  communityId: string;
+}
+
+export interface OrganizationActivity {
+  id: string;
+  organizationId: string;
+  sector: string;
+  who: string;
+  where: string;
+  when: number;
+  activity: string;
+  organization?: {
+    id: string;
+    name: string;
+    logoUrl?: string;
+  };
+  author?: {
+    id: string;
+    fullName: string;
+    avatarUrl?: string;
+  };
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ActivityFilters {
+  sector?: string;
+  when?: number;
+  search?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface PaginatedActivities {
+  activities: OrganizationActivity[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+  pages: number;
 }
 
 export interface CommunityAnalytics {
@@ -275,9 +314,10 @@ export const communityApiSlice = apiSlice.injectEndpoints({
 
     getCommunityTopics: builder.query<PaginatedTopics, { communityId: string; filters?: TopicFilters }>({
       query: ({ communityId, filters = {} }) => {
-        const { search, page, limit } = filters;
+        const { search, page, limit, filter } = filters;
         const params = new URLSearchParams();
         if (search) params.append('search', search);
+        if (filter) params.append('filter', filter);
         if (page) params.append('page', String(page));
         if (limit) params.append('limit', String(limit));
 
@@ -297,9 +337,10 @@ export const communityApiSlice = apiSlice.injectEndpoints({
 
     getGlobalTopics: builder.query<PaginatedTopics, TopicFilters>({
       query: (filters = {}) => {
-        const { search, page, limit } = filters;
+        const { search, page, limit, filter } = filters;
         const params = new URLSearchParams();
         if (search) params.append('search', search);
+        if (filter) params.append('filter', filter);
         if (page) params.append('page', String(page));
         if (limit) params.append('limit', String(limit));
 
@@ -343,14 +384,14 @@ export const communityApiSlice = apiSlice.injectEndpoints({
       ],
     }),
 
-    updateTopic: builder.mutation<CommunityTopicDetail, { communityId: string; topicId: string; data: UpdateTopicDto }>({
+    updateTopic: builder.mutation({
       query: ({ communityId, topicId, data }) => ({
         url: `/communities/${communityId}/topics/${topicId}`,
         method: REQUEST_METHODS.PATCH,
         body: data,
       }),
-      transformResponse: (response: HttpSuccessResponse<CommunityTopicDetail>) => {
-        return response.data;
+      transformResponse: (response: any) => {
+        return response;
       },
       invalidatesTags: (result, error, { communityId, topicId }) => [
         { type: 'Communities', id: `TOPIC_${topicId}` },
@@ -412,14 +453,14 @@ export const communityApiSlice = apiSlice.injectEndpoints({
       ],
     }),
 
-    updateComment: builder.mutation<TopicComment, { communityId: string; topicId: string; commentId: string; data: UpdateCommentDto }>({
+    updateComment: builder.mutation({
       query: ({ communityId, topicId, commentId, data }) => ({
         url: `/communities/${communityId}/topics/${topicId}/comments/${commentId}`,
         method: REQUEST_METHODS.PATCH,
         body: data,
       }),
-      transformResponse: (response: HttpSuccessResponse<TopicComment>) => {
-        return response.data;
+      transformResponse: (response: any) => {
+        return response;
       },
       invalidatesTags: (result, error, { topicId }) => [
         { type: 'Communities', id: `TOPIC_${topicId}` },
@@ -459,6 +500,77 @@ export const communityApiSlice = apiSlice.injectEndpoints({
         return response.data || [];
       },
     }),
+
+    getOrganizationActivities: builder.query<PaginatedActivities, ActivityFilters>({
+      query: (filters = {}) => {
+        const { sector, when, search, page, limit } = filters;
+        const params = new URLSearchParams();
+        if (sector) params.append('sector', sector);
+        if (when) params.append('when', String(when));
+        if (search) params.append('search', search);
+        if (page) params.append('page', String(page));
+        if (limit) params.append('limit', String(limit));
+
+        const qs = params.toString();
+        return {
+          url: `/organizations/activities${qs ? `?${qs}` : ''}`,
+          method: REQUEST_METHODS.GET,
+        };
+      },
+      transformResponse: (response: any) => {
+        // Handle common response wrapping if necessary, otherwise return data
+        return response.data || response;
+      },
+      providesTags: ['OrgActivities'],
+    }),
+    
+    getMyOrganizationActivities: builder.query<PaginatedActivities, ActivityFilters>({
+      query: (filters = {}) => {
+        const { sector, when, search, page, limit } = filters;
+        const params = new URLSearchParams();
+        if (sector) params.append('sector', sector);
+        if (when) params.append('when', String(when));
+        if (search) params.append('search', search);
+        if (page) params.append('page', String(page));
+        if (limit) params.append('limit', String(limit));
+
+        const qs = params.toString();
+        return {
+          url: `/organizations/me/activities${qs ? `?${qs}` : ''}`,
+          method: REQUEST_METHODS.GET,
+        };
+      },
+      transformResponse: (response: any) => {
+        return response.data || response;
+      },
+      providesTags: ['OrgActivities'],
+    }),
+
+    postOrganizationActivity: builder.mutation<ApiResponse<OrganizationActivity>, Partial<OrganizationActivity>>({
+      query: (data) => ({
+        url: '/organizations/me/activities',
+        method: REQUEST_METHODS.POST,
+        body: data,
+      }),
+      invalidatesTags: ['OrgActivities'],
+    }),
+
+    updateOrganizationActivity: builder.mutation<ApiResponse<OrganizationActivity>, { id: string; data: Partial<OrganizationActivity> }>({
+      query: ({ id, data }) => ({
+        url: `/organizations/me/activities/${id}`,
+        method: REQUEST_METHODS.PATCH,
+        body: data,
+      }),
+      invalidatesTags: ['OrgActivities'],
+    }),
+
+    deleteOrganizationActivity: builder.mutation<ApiResponse<any>, string>({
+      query: (id) => ({
+        url: `/organizations/me/activities/${id}`,
+        method: REQUEST_METHODS.DELETE,
+      }),
+      invalidatesTags: ['OrgActivities'],
+    }),
   }),
 });
 
@@ -484,4 +596,9 @@ export const {
   useDeleteCommentMutation,
   useDeleteTopicMutation,
   useSearchCommunityMembersQuery,
+  useGetOrganizationActivitiesQuery,
+  useGetMyOrganizationActivitiesQuery,
+  usePostOrganizationActivityMutation,
+  useUpdateOrganizationActivityMutation,
+  useDeleteOrganizationActivityMutation,
 } = communityApiSlice;

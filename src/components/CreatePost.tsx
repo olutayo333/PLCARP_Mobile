@@ -1,14 +1,7 @@
-import React, { useState } from 'react';
-
-import CustomAlert from '../utils/CustomAlert';
-const Alert = CustomAlert;
-import { StyleSheet, View, Text, TextInput, TouchableOpacity, Image, ScrollView, ActivityIndicator, FlatList, Platform } from 'react-native';;
-import { Camera, X, Image as ImageIcon, ChevronDown } from 'lucide-react-native';
-import { uploadFile } from '../services/axiosClient';
-import { useGetCommunitiesQuery, useCreateCommunityTopicMutation, CommunitySearchResult } from '../services/communityApi';
-import { useDispatch } from 'react-redux';
-import { showToast } from '../store/slices/uiSlice';
-import { Modal } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, FlatList, Platform, Modal, KeyboardAvoidingView, Image } from 'react-native';
+import { X, ChevronDown } from 'lucide-react-native';
+import { useGetCommunitiesQuery, useCreateCommunityTopicMutation, useSearchCommunityMembersQuery, CommunitySearchResult } from '../services/communityApi';
 
 interface CreatePostProps {
   onCancel: () => void;
@@ -16,16 +9,31 @@ interface CreatePostProps {
 }
 
 export function CreatePost({ onCancel, onSuccess }: CreatePostProps) {
-  const dispatch = useDispatch();
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
-  const [image, setImage] = useState<string | null>(null);
   const [selectedCommunity, setSelectedCommunity] = useState<CommunitySearchResult | null>(null);
   const [showCommunityPicker, setShowCommunityPicker] = useState(false);
   const [uploading, setUploading] = useState(false);
 
+  // Mention States
+  const [mentionQuery, setMentionQuery] = useState('');
+  const [showMentions, setShowMentions] = useState(false);
+  const [debouncedMentionQuery, setDebouncedMentionQuery] = useState('');
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedMentionQuery(mentionQuery);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [mentionQuery]);
+
   const { data: communitiesData, isLoading: loadingCommunities } = useGetCommunitiesQuery({});
   const [createTopic] = useCreateCommunityTopicMutation();
+
+  const { data: memberResults } = useSearchCommunityMembersQuery(
+    { communityId: selectedCommunity?.id || '', query: debouncedMentionQuery },
+    { skip: !showMentions || !debouncedMentionQuery || !selectedCommunity }
+  );
 
   // Cross-platform modal state
   type ConfirmConfig = { title: string; message: string; confirmText: string; hideCancel?: boolean; danger?: boolean; onConfirm: () => void };
@@ -34,65 +42,56 @@ export function CreatePost({ onCancel, onSuccess }: CreatePostProps) {
   const showConfirm = (cfg: ConfirmConfig) => setConfirmModal(cfg);
   const dismissConfirm = () => setConfirmModal(null);
 
-  const pickImage = async () => {
-    try {
-      const ImagePicker = await import('expo-image-picker');
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
-      });
-      if (!result.canceled) {
-        setImage(result.assets[0].uri);
-      }
-    } catch (e) {
-      showConfirm({ title: 'Unavailable', message: 'Image picker is not available on this device.', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
+  const handleInputChange = (text: string) => {
+    setBody(text);
+    const match = text.match(/@(\w*)$/);
+    if (match) {
+      setMentionQuery(match[1]);
+      setShowMentions(true);
+    } else {
+      setShowMentions(false);
+      setMentionQuery('');
     }
+  };
+
+  const handleSelectMention = (member: { id: string; fullName: string }) => {
+    const newText = body.replace(/@\w*$/, `@${member.fullName} `);
+    setBody(newText);
+    setShowMentions(false);
+    setMentionQuery('');
   };
 
   const handlePost = async () => {
     if (!selectedCommunity) {
-      showConfirm({ title: 'Error', message: 'Please select a community', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
+      showConfirm({ title: 'Error', message: 'Please select a community', confirmText: 'OK', hideCancel: true, onConfirm: () => { } });
       return;
     }
-    if (!title || !body) {
-      showConfirm({ title: 'Error', message: 'Please fill in title and body', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
+    if (!title.trim() || !body.trim()) {
+      showConfirm({ title: 'Error', message: 'Please fill in title and body', confirmText: 'OK', hideCancel: true, onConfirm: () => { } });
       return;
     }
-
     setUploading(true);
     try {
-      let imageUrl = '';
-      if (image) {
-        const file = {
-          uri: image,
-          name: 'photo.jpg',
-          type: 'image/jpeg',
-        };
-
-        const uploadResponse = await uploadFile(file);
-        // Assuming uploadFile returns the URL in its response
-        // For now, we'll just proceed as the API might handle it differently
-      }
-
-      await createTopic({
+      const response = await createTopic({
         communityId: selectedCommunity.id,
         data: {
-          title,
-          body
+          title: title.trim(),
+          body: body.trim()
         }
       }).unwrap();
-
-      showConfirm({
-        title: 'Success',
-        message: 'Topic created successfully!',
-        confirmText: 'Done',
-        hideCancel: true,
-        onConfirm: () => onSuccess()
-      });
+      if(response?.status){
+        showConfirm({
+          title: 'Success',
+          message: response.message || 'Topic created successfully!',
+          confirmText: 'Done',
+          hideCancel: true,
+          onConfirm: () => onSuccess()
+        });
+      }else{
+        showConfirm({ title: 'Error', message: response.message || 'Failed to create topic', confirmText: 'Retry', hideCancel: true, onConfirm: () => { } });
+      }
     } catch (error: any) {
-      showConfirm({ title: 'Error', message: error.data?.message || 'Failed to create topic', confirmText: 'Retry', hideCancel: true, onConfirm: () => {} });
+      showConfirm({ title: 'Error', message: error.data?.message || 'Failed to create topic', confirmText: 'Retry', hideCancel: true, onConfirm: () => { } });
     } finally {
       setUploading(false);
     }
@@ -101,7 +100,7 @@ export function CreatePost({ onCancel, onSuccess }: CreatePostProps) {
   if (showCommunityPicker) {
     return (
       <View style={styles.container}>
-        <View style={styles.header}>
+        <View style={[styles.header, { borderBottomWidth: 1, borderBottomColor: '#f3f4f6' }]}>
           <TouchableOpacity onPress={() => setShowCommunityPicker(false)}>
             <X size={24} color="#374151" />
           </TouchableOpacity>
@@ -132,77 +131,85 @@ export function CreatePost({ onCancel, onSuccess }: CreatePostProps) {
   }
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
       <View style={styles.header}>
         <TouchableOpacity onPress={onCancel}>
           <X size={24} color="#374151" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>New Topic</Text>
-        <TouchableOpacity
-          onPress={handlePost}
-          disabled={uploading}
-          style={[styles.postButton, uploading && styles.postButtonDisabled]}
-        >
-          {uploading ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <Text style={styles.postButtonText}>Post</Text>
-          )}
-        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Start a New Discussion</Text>
+        <View style={{ width: 24 }} />
       </View>
 
-      <ScrollView style={styles.content}>
-        <TouchableOpacity
-          style={styles.communitySelector}
-          onPress={() => setShowCommunityPicker(true)}
-        >
-          <Text style={[styles.communitySelectorText, !selectedCommunity && { color: '#9ca3af' }]}>
-            {selectedCommunity ? `Posting to: ${selectedCommunity.name}` : 'Select a community'}
-          </Text>
-          <ChevronDown size={20} color="#6b7280" />
-        </TouchableOpacity>
+      <ScrollView style={styles.content} keyboardShouldPersistTaps="handled">
+        <View style={styles.formCard}>
+          <Text style={styles.label}>Community</Text>
+          <TouchableOpacity
+            style={styles.communitySelector}
+            onPress={() => setShowCommunityPicker(true)}
+          >
+            <Text style={[styles.communitySelectorText, !selectedCommunity && { color: '#9ca3af' }]}>
+              {selectedCommunity ? selectedCommunity.name : 'Select a community'}
+            </Text>
+            <ChevronDown size={20} color="#6b7280" />
+          </TouchableOpacity>
 
-        <View style={styles.inputContainer}>
+          <Text style={styles.label}>Title</Text>
           <TextInput
             style={styles.titleInput}
-            placeholder="Topic Title"
+            placeholder="Topic title..."
             placeholderTextColor="#9ca3af"
             value={title}
             onChangeText={setTitle}
           />
-          <TextInput
-            style={styles.bodyInput}
-            placeholder="What's on your mind?"
-            placeholderTextColor="#9ca3af"
-            multiline
-            value={body}
-            onChangeText={setBody}
-          />
+
+          <Text style={styles.label}>Discussion Content</Text>
+          <View style={styles.bodyInputContainer}>
+            <TextInput
+              style={styles.bodyInput}
+              placeholder="Provide details about your discussion topic... (type @ to mention someone)"
+              placeholderTextColor="#9ca3af"
+              multiline
+              value={body}
+              onChangeText={handleInputChange}
+            />
+
+            {/* Mentions Overlay */}
+            {showMentions && memberResults && memberResults.length > 0 && (
+              <View style={styles.mentionsOverlay}>
+                {memberResults.map((member) => (
+                  <TouchableOpacity
+                    key={member.id}
+                    style={styles.mentionItem}
+                    onPress={() => handleSelectMention(member)}
+                  >
+                    <View style={styles.mentionAvatar}>
+                      <Text style={styles.mentionAvatarText}>{member.fullName.charAt(0)}</Text>
+                    </View>
+                    <Text style={styles.mentionName}>{member.fullName}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+          </View>
         </View>
 
-        {image ? (
-          <View style={styles.imagePreviewContainer}>
-            <Image source={{ uri: image }} style={styles.imagePreview} />
-            <TouchableOpacity
-              style={styles.removeImage}
-              onPress={() => setImage(null)}
-            >
-              <X size={20} color="#fff" />
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <TouchableOpacity style={styles.imagePlaceholder} onPress={pickImage}>
-            <View style={styles.placeholderContent}>
-              <Camera size={48} color="#9ca3af" />
-              <Text style={styles.placeholderText}>Add an image (optional)</Text>
-            </View>
+        <View style={styles.actions}>
+          <TouchableOpacity style={styles.cancelButton} onPress={onCancel}>
+            <Text style={styles.cancelButtonText}>Cancel</Text>
           </TouchableOpacity>
-        )}
-
-        <View style={styles.options}>
-          <TouchableOpacity style={styles.optionItem} onPress={pickImage}>
-            <ImageIcon size={24} color="#0e7490" />
-            <Text style={styles.optionText}>Photo Library</Text>
+          <TouchableOpacity
+            style={[styles.postButton, uploading && styles.postButtonDisabled]}
+            onPress={handlePost}
+            disabled={uploading}
+          >
+            {uploading ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={styles.postButtonText}>Post Topic</Text>
+            )}
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -237,152 +244,177 @@ export function CreatePost({ onCancel, onSuccess }: CreatePostProps) {
           </View>
         </View>
       </Modal>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#f8fafc',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: '#fff',
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
-    color: '#111827',
+    color: '#1e293b',
+  },
+  content: {
+    flex: 1,
+    padding: 20,
+  },
+  formCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
+  },
+  label: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#334155',
+    marginBottom: 8,
+    marginTop: 16,
+  },
+  communitySelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 14,
+    borderWidth: 1.5,
+    borderColor: '#e2e8f0',
+    borderRadius: 12,
+    backgroundColor: '#fff',
+  },
+  communitySelectorText: {
+    fontSize: 16,
+    color: '#1e293b',
+    fontWeight: '500',
+  },
+  titleInput: {
+    fontSize: 16,
+    color: '#1e293b',
+    padding: 14,
+    borderWidth: 1.5,
+    borderColor: '#0e7490',
+    borderRadius: 12,
+    backgroundColor: '#fff',
+    ...Platform.select({
+      web: {
+        outlineStyle: 'none',
+      },
+    }),
+  },
+  bodyInputContainer: {
+    position: 'relative',
+    zIndex: 1,
+  },
+  bodyInput: {
+    fontSize: 16,
+    color: '#1e293b',
+    minHeight: 180,
+    textAlignVertical: 'top',
+    padding: 14,
+    borderWidth: 1.5,
+    borderColor: '#e2e8f0',
+    borderRadius: 12,
+    backgroundColor: '#fff',
+    ...Platform.select({
+      web: {
+        outlineStyle: 'none',
+      },
+    }),
+  },
+  mentionsOverlay: {
+    position: 'absolute',
+    bottom: '100%',
+    left: 0,
+    right: 0,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 15,
+    elevation: 10,
+    maxHeight: 200,
+    overflow: 'hidden',
+    marginBottom: 8,
+  },
+  mentionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+    gap: 12,
+  },
+  mentionAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#0e7490',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mentionAvatarText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  mentionName: {
+    fontSize: 14,
+    color: '#334155',
+    fontWeight: '500',
+  },
+  actions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 24,
+    marginBottom: 40,
+  },
+  cancelButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#0e7490',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+  },
+  cancelButtonText: {
+    color: '#0e7490',
+    fontSize: 16,
+    fontWeight: '700',
   },
   postButton: {
+    flex: 2,
     backgroundColor: '#0e7490',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-    minWidth: 70,
+    paddingVertical: 14,
+    borderRadius: 12,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   postButtonDisabled: {
     backgroundColor: '#a5f3fc',
   },
   postButtonText: {
     color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
-  content: {
-    flex: 1,
-  },
-  communitySelector: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
-  },
-  communitySelectorText: {
     fontSize: 16,
-    color: '#111827',
-    fontWeight: '500',
-  },
-  inputContainer: {
-    padding: 16,
-    gap: 12,
-  },
-  titleInput: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#111827',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 8,
-    backgroundColor: '#fff',
-    ...Platform.select({
-      web: {
-        outlineStyle: 'none',
-      },
-    }),
-  },
-  bodyInput: {
-    fontSize: 16,
-    color: '#374151',
-    minHeight: 150,
-    textAlignVertical: 'top',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 8,
-    backgroundColor: '#fff',
-    ...Platform.select({
-      web: {
-        outlineStyle: 'none',
-      },
-    }),
-  },
-  imagePlaceholder: {
-    width: '100%',
-    aspectRatio: 16 / 9,
-    backgroundColor: '#f9fafb',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderStyle: 'dashed',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  placeholderContent: {
-    alignItems: 'center',
-    gap: 12,
-  },
-  placeholderText: {
-    color: '#9ca3af',
-    fontSize: 14,
-  },
-  imagePreviewContainer: {
-    width: '100%',
-    aspectRatio: 16 / 9,
-    position: 'relative',
-  },
-  imagePreview: {
-    width: '100%',
-    height: '100%',
-  },
-  removeImage: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  options: {
-    padding: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#f3f4f6',
-    marginTop: 24,
-  },
-  optionItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 12,
-  },
-  optionText: {
-    fontSize: 16,
-    color: '#374151',
-    fontWeight: '500',
+    fontWeight: '700',
   },
   communityOption: {
     flexDirection: 'row',
@@ -399,7 +431,7 @@ const styles = StyleSheet.create({
   },
   communityOptionText: {
     fontSize: 16,
-    color: '#111827',
+    color: '#1e293b',
     fontWeight: '500',
   },
   emptyText: {
@@ -407,7 +439,6 @@ const styles = StyleSheet.create({
     marginTop: 40,
     color: '#6b7280',
   },
-  // Premium Confirmation Modal Styles
   confirmOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.45)',
@@ -428,13 +459,13 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   confirmTitle: {
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: '700',
     color: '#111827',
     marginBottom: 8,
   },
   confirmMessage: {
-    fontSize: 14,
+    fontSize: 15,
     color: '#6b7280',
     lineHeight: 22,
     marginBottom: 20,
@@ -451,7 +482,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   confirmCancelText: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '600',
     color: '#374151',
   },
@@ -466,7 +497,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#ef4444',
   },
   confirmOkText: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '700',
     color: '#fff',
   },

@@ -20,6 +20,16 @@ const EXPERTISE_AREAS = [
   'Organizational development and Change management'
 ];
 
+const Wrapper = Platform.OS === 'ios'
+  ? ({ children }: { children: React.ReactNode }) => (
+    <KeyboardAvoidingView behavior="padding" style={{ flex: 1, backgroundColor: '#fff' }}>
+      {children}
+    </KeyboardAvoidingView>
+  )
+  : ({ children }: { children: React.ReactNode }) => (
+    <View style={{ flex: 1, backgroundColor: '#fff' }}>{children}</View>
+  );
+
 export function NGORegistrationScreen({ onBack, onComplete }: {
   onBack: () => void;
   onComplete: () => void;
@@ -49,6 +59,11 @@ export function NGORegistrationScreen({ onBack, onComplete }: {
   const [lga, setLga] = useState('');
   const [address, setAddress] = useState('');
 
+  // New NGO Fields
+  const [isLocalOrNational, setIsLocalOrNational] = useState<boolean | null>(null);
+  const [hasHumanitarianExperience, setHasHumanitarianExperience] = useState<boolean | null>(null);
+  const [isInterestedInTraining, setIsInterestedInTraining] = useState<boolean | null>(null);
+
   // UI State for Pickers
   const [showStatePicker, setShowStatePicker] = useState(false);
   const [showLGAPicker, setShowLGAPicker] = useState(false);
@@ -74,21 +89,21 @@ export function NGORegistrationScreen({ onBack, onComplete }: {
   const handleNext = () => {
     if (step === 1) {
       if (!email || !password) {
-        showConfirm({ title: 'Error', message: 'Please fill in all fields', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
+        showConfirm({ title: 'Error', message: 'Please fill in all fields', confirmText: 'OK', hideCancel: true, onConfirm: () => { } });
         return;
       }
       if (!emailRegex.test(email)) {
-        showConfirm({ title: 'Error', message: 'Enter a valid email address', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
+        showConfirm({ title: 'Error', message: 'Enter a valid email address', confirmText: 'OK', hideCancel: true, onConfirm: () => { } });
         return;
       }
       if (!passwordRegex.test(password)) {
-        showConfirm({ title: 'Error', message: 'Password must contain an uppercase letter, a number and a symbol', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
+        showConfirm({ title: 'Error', message: 'Password must contain an uppercase letter, a number and a symbol', confirmText: 'OK', hideCancel: true, onConfirm: () => { } });
         return;
       }
       setStep(2);
     } else if (step === 2) {
       if (!fullName || !title || !personalPhone || !yearsOfExperience || areasOfExpertise.length === 0 || !termsAccepted) {
-        showConfirm({ title: 'Error', message: 'Please fill in all fields, select expertise and accept terms', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
+        showConfirm({ title: 'Error', message: 'Please fill in all fields, select expertise and accept terms', confirmText: 'OK', hideCancel: true, onConfirm: () => { } });
         return;
       }
       setStep(3);
@@ -98,8 +113,8 @@ export function NGORegistrationScreen({ onBack, onComplete }: {
   };
 
   const handleSubmit = async () => {
-    if (!orgName || !cacNumber || !orgPhone || !state || !lga || !address) {
-      showConfirm({ title: 'Error', message: 'Please fill in all organisation fields', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
+    if (!orgName || !cacNumber || !orgPhone || !state || !lga || !address || isLocalOrNational === null || hasHumanitarianExperience === null || isInterestedInTraining === null) {
+      showConfirm({ title: 'Error', message: 'Please fill in all organisation fields and answer all questions', confirmText: 'OK', hideCancel: true, onConfirm: () => { } });
       return;
     }
 
@@ -118,24 +133,27 @@ export function NGORegistrationScreen({ onBack, onComplete }: {
       yearsOfExperience: Number(yearsOfExperience),
       areasOfExpertise,
       address,
+      isLocalOrNational,
+      hasHumanitarianExperience,
+      isInterestedInTraining,
     };
 
     try {
       const response = await registerApi(payload).unwrap() as any;
       if (response.status) {
-        showConfirm({ 
-          title: 'Success', 
-          message: response.message || 'Registration successful! Please verify your email.', 
-          confirmText: 'Done', 
+        showConfirm({
+          title: 'Success',
+          message: response.message || 'Registration successful! Please verify your email.',
+          confirmText: 'Done',
           hideCancel: true,
-          onConfirm: () => onComplete() 
+          onConfirm: () => onComplete()
         });
       } else {
-        showConfirm({ title: 'Error', message: response.message || 'Registration failed', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
+        showConfirm({ title: 'Error', message: response.message || 'Registration failed', confirmText: 'OK', hideCancel: true, onConfirm: () => { } });
       }
     } catch (error: any) {
       const serverError = error?.data?.message || 'Registration failed. Please try again.';
-      showConfirm({ title: 'Error', message: serverError, confirmText: 'Retry', hideCancel: true, onConfirm: () => {} });
+      showConfirm({ title: 'Error', message: serverError, confirmText: 'Retry', hideCancel: true, onConfirm: () => { } });
     }
   };
 
@@ -209,13 +227,14 @@ export function NGORegistrationScreen({ onBack, onComplete }: {
       </View>
     </Modal>
   );
-
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
-    >
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+    <Wrapper>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        style={{ flex: 1 }}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.progressContainer}>
           <View style={styles.progressHeader}>
             <Text style={styles.stepText}>STEP {step} OF 3</Text>
@@ -301,7 +320,7 @@ export function NGORegistrationScreen({ onBack, onComplete }: {
                   placeholder="0800 000 0000"
                   placeholderTextColor="#9ca3af"
                   value={personalPhone}
-                  onChangeText={setPersonalPhone}
+                  onChangeText={(text) => setPersonalPhone(text.replace(/[^0-9]/g, ''))}
                   keyboardType="phone-pad"
                 />
               </View>
@@ -313,7 +332,7 @@ export function NGORegistrationScreen({ onBack, onComplete }: {
                   placeholder="e.g. 10"
                   placeholderTextColor="#9ca3af"
                   value={yearsOfExperience}
-                  onChangeText={setYearsOfExperience}
+                  onChangeText={(text) => setYearsOfExperience(text.replace(/[^0-9]/g, ''))}
                   keyboardType="numeric"
                 />
               </View>
@@ -386,7 +405,7 @@ export function NGORegistrationScreen({ onBack, onComplete }: {
                   placeholder="0801 234 5678"
                   placeholderTextColor="#9ca3af"
                   value={orgPhone}
-                  onChangeText={setOrgPhone}
+                  onChangeText={(text) => setOrgPhone(text.replace(/[^0-9]/g, ''))}
                   keyboardType="phone-pad"
                 />
               </View>
@@ -420,8 +439,61 @@ export function NGORegistrationScreen({ onBack, onComplete }: {
                   value={address}
                   onChangeText={setAddress}
                   multiline
-                  numberOfLines={4}
                 />
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Is a local/national organization in Nigeria? <Text style={styles.required}>*</Text></Text>
+                <View style={styles.radioGroup}>
+                  <TouchableOpacity style={styles.radioOption} onPress={() => setIsLocalOrNational(true)}>
+                    <View style={[styles.radioOuter, isLocalOrNational === true && styles.radioOuterSelected]}>
+                      {isLocalOrNational === true && <View style={styles.radioInner} />}
+                    </View>
+                    <Text style={styles.radioLabel}>Yes</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.radioOption} onPress={() => setIsLocalOrNational(false)}>
+                    <View style={[styles.radioOuter, isLocalOrNational === false && styles.radioOuterSelected]}>
+                      {isLocalOrNational === false && <View style={styles.radioInner} />}
+                    </View>
+                    <Text style={styles.radioLabel}>No</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Has experience working in humanitarian contexts? <Text style={styles.required}>*</Text></Text>
+                <View style={styles.radioGroup}>
+                  <TouchableOpacity style={styles.radioOption} onPress={() => setHasHumanitarianExperience(true)}>
+                    <View style={[styles.radioOuter, hasHumanitarianExperience === true && styles.radioOuterSelected]}>
+                      {hasHumanitarianExperience === true && <View style={styles.radioInner} />}
+                    </View>
+                    <Text style={styles.radioLabel}>Yes</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.radioOption} onPress={() => setHasHumanitarianExperience(false)}>
+                    <View style={[styles.radioOuter, hasHumanitarianExperience === false && styles.radioOuterSelected]}>
+                      {hasHumanitarianExperience === false && <View style={styles.radioInner} />}
+                    </View>
+                    <Text style={styles.radioLabel}>No</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Interested in training and mentorship programs? <Text style={styles.required}>*</Text></Text>
+                <View style={styles.radioGroup}>
+                  <TouchableOpacity style={styles.radioOption} onPress={() => setIsInterestedInTraining(true)}>
+                    <View style={[styles.radioOuter, isInterestedInTraining === true && styles.radioOuterSelected]}>
+                      {isInterestedInTraining === true && <View style={styles.radioInner} />}
+                    </View>
+                    <Text style={styles.radioLabel}>Yes</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.radioOption} onPress={() => setIsInterestedInTraining(false)}>
+                    <View style={[styles.radioOuter, isInterestedInTraining === false && styles.radioOuterSelected]}>
+                      {isInterestedInTraining === false && <View style={styles.radioInner} />}
+                    </View>
+                    <Text style={styles.radioLabel}>No</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
           </View>
@@ -482,7 +554,7 @@ export function NGORegistrationScreen({ onBack, onComplete }: {
 
       {renderStatePicker()}
       {renderLGAPicker()}
-    </KeyboardAvoidingView>
+    </Wrapper>
   );
 }
 
@@ -492,6 +564,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
   scrollContent: {
+    flexGrow: 1,
     padding: 24,
     paddingTop: 60,
   },
@@ -787,5 +860,37 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: '#fff',
+  },
+  radioGroup: {
+    flexDirection: 'row',
+    gap: 24,
+    marginTop: 4,
+  },
+  radioOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  radioOuter: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    borderColor: '#d1d5db',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  radioOuterSelected: {
+    borderColor: '#0e7490',
+  },
+  radioInner: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#0e7490',
+  },
+  radioLabel: {
+    fontSize: 16,
+    color: '#374151',
   },
 });

@@ -31,7 +31,7 @@ import {
     useUpdateExpertProfileMutation,
     uploadAvatarApi,
 } from '../services/profileApi';
-import { useGetMySubscriptionsQuery } from '../services/communityApi';
+import { useGetMySubscriptionsQuery, useGetGeneralAnalyticsQuery } from '../services/communityApi';
 import { useSendPasswordVerificationCodeMutation } from '../services/authApi';
 import { showToast } from '../store/slices/uiSlice';
 import { Skeleton } from '../components/common/Skeleton';
@@ -48,7 +48,7 @@ export function ProfileScreen({ navigation }: { navigation?: any }) {
     const user = useSelector((state: RootState) => state.user.user);
     const isLoggedIn = useSelector((state: RootState) => state.user.isLoggedIn);
     const { data: profile, isLoading } = useGetUserProfileQuery(undefined, { skip: !isLoggedIn });
-    
+
     // Cross-platform modal state
     type ConfirmConfig = { title: string; message: string; confirmText: string; hideCancel?: boolean; danger?: boolean; onConfirm: () => void };
     const [confirmModal, setConfirmModal] = useState<ConfirmConfig | null>(null);
@@ -60,6 +60,7 @@ export function ProfileScreen({ navigation }: { navigation?: any }) {
 
     const [sendPasswordCode, { isLoading: isSendingPasswordCode }] = useSendPasswordVerificationCodeMutation();
     const { data: subscriptions } = useGetMySubscriptionsQuery(undefined, { skip: !isLoggedIn });
+    const { data: generalAnalytics } = useGetGeneralAnalyticsQuery(undefined, { skip: !isLoggedIn });
     const [showPasswordModal, setShowPasswordModal] = useState(false);
     const [passwordResetSent, setPasswordResetSent] = useState(false);
 
@@ -222,7 +223,7 @@ export function ProfileScreen({ navigation }: { navigation?: any }) {
     const handlePasswordReset = async () => {
         const email = profile?.email || user?.email;
         if (!email) {
-            showConfirm({ title: 'Error', message: 'User email not found. Please log in again.', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
+            showConfirm({ title: 'Error', message: 'User email not found. Please log in again.', confirmText: 'OK', hideCancel: true, onConfirm: () => { } });
             return;
         }
         setPasswordResetSent(false);
@@ -233,11 +234,15 @@ export function ProfileScreen({ navigation }: { navigation?: any }) {
         const email = profile?.email || user?.email;
         if (!email) return;
         try {
-            await sendPasswordCode({ email }).unwrap();
+           const response = await sendPasswordCode({ email }).unwrap() as any;
+           if(response?.status){
             setPasswordResetSent(true);
+           }else{
+            showConfirm({ title: 'Error', message: response?.message || 'Failed to send reset email. Please try again.', confirmText: 'Retry', hideCancel: true, onConfirm: () => { } });
+           }
         } catch (err: any) {
             console.error('Password reset error:', err);
-            showConfirm({ title: 'Error', message: err?.data?.message || 'Failed to send reset email. Please try again.', confirmText: 'Retry', hideCancel: true, onConfirm: () => {} });
+            showConfirm({ title: 'Error', message: err?.data?.message || 'Failed to send reset email. Please try again.', confirmText: 'Retry', hideCancel: true, onConfirm: () => { } });
         }
     };
 
@@ -283,9 +288,9 @@ export function ProfileScreen({ navigation }: { navigation?: any }) {
                 <View style={[styles.profileSection, { marginTop: 15 }]}>
                     <Text style={styles.profileSectionHeader}>MY STATS</Text>
                     <View style={styles.statsCard}>
-                        <StatItem label="Topics started" value={profile?.metrics?.topicsCount || 0} />
-                        <StatItem label="Replies posted" value={profile?.metrics?.repliesPosted || 0} />
-                        <StatItem label="Replies received" value={profile?.metrics?.repliesReceived || 0} />
+                        <StatItem label="Topics started" value={generalAnalytics?.myTopicsCount || 0} />
+                        <StatItem label="Replies posted" value={generalAnalytics?.myRepliesPosted || 0} />
+                        <StatItem label="Replies received" value={generalAnalytics?.myRepliesReceived || 0} />
                         <StatItem label="Likes received" value={profile?.metrics?.likesReceived || 0} />
                     </View>
                 </View>
@@ -310,7 +315,7 @@ export function ProfileScreen({ navigation }: { navigation?: any }) {
                         <MenuItem
                             icon={Rss}
                             label="My Subscriptions"
-                            subLabel={`${subscriptions?.length || 0} Subscriptions`}
+                            subLabel={`${generalAnalytics?.myJoinedCommunities || subscriptions?.length || 0} Subscriptions`}
                             onPress={handleSubscriptionsPress}
                         />
 
@@ -354,21 +359,21 @@ export function ProfileScreen({ navigation }: { navigation?: any }) {
                 <View style={styles.profileSection}>
                     <Text style={styles.profileSectionHeader}>SUPPORT</Text>
                     <View style={styles.menuCard}>
-                        <MenuItem 
-                            icon={HelpCircle} 
-                            label="Help & Support" 
+                        <MenuItem
+                            icon={HelpCircle}
+                            label="Help & Support"
                             onPress={() => navigation.navigate('HelpSupport')}
                         />
                         <View style={styles.menuDivider} />
-                        <MenuItem 
-                            icon={FileText} 
-                            label="Community guidelines" 
+                        <MenuItem
+                            icon={FileText}
+                            label="Community guidelines"
                             onPress={() => navigation.navigate('CommunityGuidelines')}
                         />
                         <View style={styles.menuDivider} />
-                        <MenuItem 
-                            icon={FileText} 
-                            label="Terms of service" 
+                        <MenuItem
+                            icon={FileText}
+                            label="Terms of service"
                             onPress={() => navigation.navigate('TermsOfService')}
                         />
                         <View style={styles.menuDivider} />
@@ -508,7 +513,7 @@ function EditProfileScreen({ onBack }: { onBack: () => void }) {
             const ImagePicker = await import('expo-image-picker');
             const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
             if (status !== 'granted') {
-                showConfirm({ title: 'Permission Denied', message: 'We need camera roll permissions to change your avatar.', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
+                showConfirm({ title: 'Permission Denied', message: 'We need camera roll permissions to change your avatar.', confirmText: 'OK', hideCancel: true, onConfirm: () => { } });
                 return;
             }
 
@@ -535,17 +540,17 @@ function EditProfileScreen({ onBack }: { onBack: () => void }) {
                         dispatch(showToast({ message: response?.message || 'Profile picture updated successfully!', type: 'success' }));
                         refetch();
                     } else {
-                        showConfirm({ title: 'Error', message: response?.message || 'Failed to upload avatar.', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
+                        showConfirm({ title: 'Error', message: response?.message || 'Failed to upload avatar.', confirmText: 'OK', hideCancel: true, onConfirm: () => { } });
                     }
                 } catch (error: any) {
                     const errorMessage = error?.response?.data?.message || 'Failed to upload avatar. Please try again.';
-                    showConfirm({ title: 'Upload Error', message: errorMessage, confirmText: 'Retry', hideCancel: true, onConfirm: () => {} });
+                    showConfirm({ title: 'Upload Error', message: errorMessage, confirmText: 'Retry', hideCancel: true, onConfirm: () => { } });
                 } finally {
                     setIsUploadingAvatar(false);
                 }
             }
         } catch (e) {
-            showConfirm({ title: 'Unavailable', message: 'Image picker is not available on this device.', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
+            showConfirm({ title: 'Unavailable', message: 'Image picker is not available on this device.', confirmText: 'OK', hideCancel: true, onConfirm: () => { } });
         }
     };
 
@@ -587,7 +592,7 @@ function EditProfileScreen({ onBack }: { onBack: () => void }) {
         const digitCount = phoneNumber.replace(/\D/g, '').length;
 
         if (digitCount < 10) {
-            showConfirm({ title: 'Invalid Phone Number', message: 'Phone number must be at least 10 digits.', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
+            showConfirm({ title: 'Invalid Phone Number', message: 'Phone number must be at least 10 digits.', confirmText: 'OK', hideCancel: true, onConfirm: () => { } });
             return;
         }
 
@@ -595,21 +600,21 @@ function EditProfileScreen({ onBack }: { onBack: () => void }) {
             // Clean before sending to API
             const cleanedPhone = phoneNumber.replace(/\s/g, '');
             const response = await updateProfile({ fullName, phoneNumber: cleanedPhone }).unwrap();
-            
+
             if (response?.status) {
-                showConfirm({ 
-                    title: 'Success', 
-                    message: response.message || 'Profile updated successfully.', 
-                    confirmText: 'Done', 
+                showConfirm({
+                    title: 'Success',
+                    message: response.message || 'Profile updated successfully.',
+                    confirmText: 'Done',
                     hideCancel: true,
-                    onConfirm: () => onBack() 
+                    onConfirm: () => onBack()
                 });
             } else {
-                showConfirm({ title: 'Error', message: response?.message || 'Failed to update profile.', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
+                showConfirm({ title: 'Error', message: response?.message || 'Failed to update profile.', confirmText: 'OK', hideCancel: true, onConfirm: () => { } });
             }
         } catch (error) {
             console.error('Failed to update profile:', error);
-            showConfirm({ title: 'Error', message: 'Failed to update profile. Please try again.', confirmText: 'Retry', hideCancel: true, onConfirm: () => {} });
+            showConfirm({ title: 'Error', message: 'Failed to update profile. Please try again.', confirmText: 'Retry', hideCancel: true, onConfirm: () => { } });
         }
     };
 
@@ -740,19 +745,19 @@ function OrgProfileScreen({ onBack }: { onBack: () => void }) {
         try {
             const response = await updateOrg({ name, description, website }).unwrap();
             if (response?.status) {
-                showConfirm({ 
-                    title: 'Success', 
-                    message: response.message || 'Organization profile updated.', 
-                    confirmText: 'Done', 
+                showConfirm({
+                    title: 'Success',
+                    message: response.message || 'Organization profile updated.',
+                    confirmText: 'Done',
                     hideCancel: true,
-                    onConfirm: () => onBack() 
+                    onConfirm: () => onBack()
                 });
             } else {
-                showConfirm({ title: 'Error', message: response?.message || 'Failed to update organization profile.', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
+                showConfirm({ title: 'Error', message: response?.message || 'Failed to update organization profile.', confirmText: 'OK', hideCancel: true, onConfirm: () => { } });
             }
         } catch (error) {
             console.error('Failed to update org profile:', error);
-            showConfirm({ title: 'Error', message: 'Failed to update organization profile.', confirmText: 'Retry', hideCancel: true, onConfirm: () => {} });
+            showConfirm({ title: 'Error', message: 'Failed to update organization profile.', confirmText: 'Retry', hideCancel: true, onConfirm: () => { } });
         }
     };
 
@@ -868,21 +873,21 @@ function ExpertProfileScreen({ onBack }: { onBack: () => void }) {
                 about,
                 yearsOfExperience: parseInt(yearsOfExperience) || 0
             }).unwrap();
-            
+
             if (response?.status) {
-                showConfirm({ 
-                    title: 'Success', 
-                    message: response.message || 'Expert profile updated.', 
-                    confirmText: 'Done', 
+                showConfirm({
+                    title: 'Success',
+                    message: response.message || 'Expert profile updated.',
+                    confirmText: 'Done',
                     hideCancel: true,
-                    onConfirm: () => onBack() 
+                    onConfirm: () => onBack()
                 });
             } else {
-                showConfirm({ title: 'Error', message: response?.message || 'Failed to update expert profile.', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
+                showConfirm({ title: 'Error', message: response?.message || 'Failed to update expert profile.', confirmText: 'OK', hideCancel: true, onConfirm: () => { } });
             }
         } catch (error) {
             console.error('Failed to update expert profile:', error);
-            showConfirm({ title: 'Error', message: 'Failed to update expert profile.', confirmText: 'Retry', hideCancel: true, onConfirm: () => {} });
+            showConfirm({ title: 'Error', message: 'Failed to update expert profile.', confirmText: 'Retry', hideCancel: true, onConfirm: () => { } });
         }
     };
 

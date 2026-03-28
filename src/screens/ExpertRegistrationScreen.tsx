@@ -89,7 +89,6 @@ export function ExpertRegistrationScreen({ onBack, onComplete }: {
       showConfirm({ title: 'Error', message: 'Please select at least one area of expertise and accept terms', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
       return;
     }
-
     const payload = {
       email,
       password,
@@ -100,7 +99,6 @@ export function ExpertRegistrationScreen({ onBack, onComplete }: {
       yearsOfExperience: Number(yearsExperience),
       areasOfExpertise: selectedExpertise,
     };
-
     try {
       const response = await registerApi(payload).unwrap();
       if (response.status) {

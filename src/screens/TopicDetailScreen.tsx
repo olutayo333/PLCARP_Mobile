@@ -164,12 +164,10 @@ export function TopicDetailScreen({ communityId, topicId, onBack }: TopicDetailS
             return;
         }
         try {
-
             const newLiked = !isLiked;
             setIsLiked(newLiked);
             setLikes(prev => newLiked ? prev + 1 : prev - 1);
             const response = await toggleLike({ communityId, topicId }).unwrap();
-
             if (!response?.status) {
                 // Revert state if server failed
                 setIsLiked(topic?.hasLiked || false);

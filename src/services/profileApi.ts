@@ -228,7 +228,7 @@ export const uploadAvatarApi = async (formData: FormData) => {
     const response = await axiosInstance.post('/users/profile/avatar', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
     });
-    return response.data;
+    return response;
 };
 
 /** POST /users/profile/organization/logo
@@ -240,5 +240,5 @@ export const uploadOrgLogoApi = async (formData: FormData) => {
     const response = await axiosInstance.post('/users/profile/organization/logo', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
     });
-    return response.data;
+    return response;
 };
