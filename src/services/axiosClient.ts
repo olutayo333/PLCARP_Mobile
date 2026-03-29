@@ -23,9 +23,6 @@ export const uploadFile = async (file: any, onUploadProgress?: (progressEvent: a
 
   try {
     const response = await axiosInstance.post('/upload', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
       onUploadProgress,
     });
     return response.data;

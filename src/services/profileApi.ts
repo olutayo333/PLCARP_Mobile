@@ -1,7 +1,7 @@
-import {REQUEST_METHODS} from '../constants/reqMethods';
-import {apiSlice} from './apiSlice';
+import { REQUEST_METHODS } from '../constants/reqMethods';
+import { apiSlice } from './apiSlice';
 import axiosInstance from './axiosClient';
-import {HttpSuccessResponse} from '../types/api';
+import { HttpSuccessResponse } from '../types/api';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -225,9 +225,7 @@ export const {
  *  @param formData  FormData with key "file" → File
  */
 export const uploadAvatarApi = async (formData: FormData) => {
-    const response = await axiosInstance.post('/users/profile/avatar', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-    });
+    const response = await axiosInstance.post('/users/profile/avatar', formData);
     return response;
 };
 
@@ -237,8 +235,6 @@ export const uploadAvatarApi = async (formData: FormData) => {
  *  @param formData  FormData with key "logo" → File
  */
 export const uploadOrgLogoApi = async (formData: FormData) => {
-    const response = await axiosInstance.post('/users/profile/organization/logo', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-    });
+    const response = await axiosInstance.post('/users/profile/organization/logo', formData);
     return response;
 };

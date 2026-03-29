@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 
 import CustomAlert from '../utils/CustomAlert';
 const Alert = CustomAlert;
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView, TextInput, Modal, ActivityIndicator, Image } from 'react-native';;
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView, TextInput, Modal, ActivityIndicator, Image, Platform, StatusBar } from 'react-native';
 import {
     User,
     Building2,
@@ -30,6 +30,7 @@ import {
     useGetExpertProfileQuery,
     useUpdateExpertProfileMutation,
     uploadAvatarApi,
+    uploadOrgLogoApi,
 } from '../services/profileApi';
 import { useGetMySubscriptionsQuery, useGetGeneralAnalyticsQuery } from '../services/communityApi';
 import { useSendPasswordVerificationCodeMutation } from '../services/authApi';
@@ -150,7 +151,7 @@ export function ProfileScreen({ navigation }: { navigation?: any }) {
 
     if (!isLoggedIn) {
         return (
-            <View style={[styles.guestContainer, { paddingTop: insets.top }]}>
+            <View style={[styles.guestContainer, { paddingTop: Math.max(insets.top, Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 10 : 0) }]}>
                 <ScrollView contentContainerStyle={styles.guestScrollContent}>
                     <View style={styles.guestHeader}>
                         <View style={styles.logoContainer}>
@@ -234,12 +235,12 @@ export function ProfileScreen({ navigation }: { navigation?: any }) {
         const email = profile?.email || user?.email;
         if (!email) return;
         try {
-           const response = await sendPasswordCode({ email }).unwrap() as any;
-           if(response?.status){
-            setPasswordResetSent(true);
-           }else{
-            showConfirm({ title: 'Error', message: response?.message || 'Failed to send reset email. Please try again.', confirmText: 'Retry', hideCancel: true, onConfirm: () => { } });
-           }
+            const response = await sendPasswordCode({ email }).unwrap() as any;
+            if (response?.status) {
+                setPasswordResetSent(true);
+            } else {
+                showConfirm({ title: 'Error', message: response?.message || 'Failed to send reset email. Please try again.', confirmText: 'Retry', hideCancel: true, onConfirm: () => { } });
+            }
         } catch (err: any) {
             console.error('Password reset error:', err);
             showConfirm({ title: 'Error', message: err?.data?.message || 'Failed to send reset email. Please try again.', confirmText: 'Retry', hideCancel: true, onConfirm: () => { } });
@@ -267,7 +268,7 @@ export function ProfileScreen({ navigation }: { navigation?: any }) {
     };
 
     return (
-        <View style={[styles.profileContainer, { paddingTop: insets.top }]}>
+        <View style={[styles.profileContainer, { paddingTop: Math.max(insets.top, Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 10 : 0) }]}>
             <ScrollView contentContainerStyle={styles.profileScrollContent} showsVerticalScrollIndicator={false}>
                 <View style={styles.profileHeaderPremium}>
                     <View style={styles.profileAvatarRowPremium}>
@@ -493,12 +494,12 @@ export function ProfileScreen({ navigation }: { navigation?: any }) {
 
 function EditProfileScreen({ onBack }: { onBack: () => void }) {
     const insets = useSafeAreaInsets();
+    const dispatch = useDispatch();
     const { data: profile, refetch } = useGetUserProfileQuery();
     const [updateProfile, { isLoading: isUpdating }] = useUpdateUserProfileMutation();
     const [fullName, setFullName] = useState(profile?.fullName || '');
     const [phoneNumber, setPhoneNumber] = useState(profile?.phoneNumber || '');
     const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
-    const dispatch = useDispatch();
 
     // Cross-platform modal state
     type ConfirmConfig = { title: string; message: string; confirmText: string; hideCancel?: boolean; danger?: boolean; onConfirm: () => void };
@@ -529,8 +530,23 @@ function EditProfileScreen({ onBack }: { onBack: () => void }) {
                 const formData = new FormData();
                 const fileName = asset.fileName || asset.uri.split('/').pop() || 'avatar.jpg';
                 const type = asset.mimeType || 'image/jpeg';
-                const fileToUpload = { uri: asset.uri, name: fileName, type: type };
-                formData.append('file', fileToUpload as any);
+
+                if (Platform.OS === 'web') {
+                    // On Web, we MUST convert the URI to a Blob/File for FormData to be handled as binary
+                    try {
+                        const response = await fetch(asset.uri);
+                        const blob = await response.blob();
+                        formData.append('file', blob, fileName);
+                    } catch (fetchError) {
+                        console.error('Failed to convert URI to Blob on web:', fetchError);
+                        // Fallback to native-like object if fetch fails (unlikely)
+                        formData.append('file', { uri: asset.uri, name: fileName, type: type } as any);
+                    }
+                } else {
+                    // On Native, the standard {uri, name, type} object is expected for multipart/form-data
+                    const fileToUpload = { uri: asset.uri, name: fileName, type: type };
+                    formData.append('file', fileToUpload as any);
+                }
 
                 setIsUploadingAvatar(true);
                 try {
@@ -619,7 +635,7 @@ function EditProfileScreen({ onBack }: { onBack: () => void }) {
     };
 
     return (
-        <View style={[styles.editProfileContainer, { paddingTop: insets.top }]}>
+        <View style={[styles.editProfileContainer, { paddingTop: Math.max(insets.top, Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 10 : 0) }]}>
             <View style={styles.editProfileHeader}>
                 <TouchableOpacity onPress={onBack}>
                     <ArrowLeft size={24} color="#111827" />
@@ -728,11 +744,14 @@ function EditProfileScreen({ onBack }: { onBack: () => void }) {
 
 function OrgProfileScreen({ onBack }: { onBack: () => void }) {
     const insets = useSafeAreaInsets();
+    const dispatch = useDispatch();
     const { data: org } = useGetOrgProfileQuery();
     const [updateOrg, { isLoading: isUpdating }] = useUpdateOrgProfileMutation();
     const [name, setName] = useState(org?.name || '');
     const [description, setDescription] = useState(org?.description || '');
     const [website, setWebsite] = useState(org?.website || '');
+    const [logo, setLogo] = useState(org?.logo || '');
+    const [isUploadingLogo, setIsUploadingLogo] = useState(false);
 
     // Cross-platform modal state
     type ConfirmConfig = { title: string; message: string; confirmText: string; hideCancel?: boolean; danger?: boolean; onConfirm: () => void };
@@ -740,6 +759,62 @@ function OrgProfileScreen({ onBack }: { onBack: () => void }) {
 
     const showConfirm = (cfg: ConfirmConfig) => setConfirmModal(cfg);
     const dismissConfirm = () => setConfirmModal(null);
+
+    const handleEditLogo = async () => {
+        try {
+            const ImagePicker = await import('expo-image-picker');
+            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (status !== 'granted') {
+                showConfirm({ title: 'Permission Required', message: 'We need camera roll permissions to change your logo.', confirmText: 'OK', hideCancel: true, onConfirm: () => { } });
+                return;
+            }
+
+            const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: true,
+                aspect: [1, 1],
+                quality: 0.8,
+            });
+
+            if (!result.canceled && result.assets && result.assets.length > 0) {
+                const asset = result.assets[0];
+                const formData = new FormData();
+                const fileName = asset.fileName || asset.uri.split('/').pop() || 'logo.jpg';
+                const type = asset.mimeType || 'image/jpeg';
+
+                if (Platform.OS === 'web') {
+                    try {
+                        const response = await fetch(asset.uri);
+                        const blob = await response.blob();
+                        formData.append('logo', blob, fileName);
+                    } catch (err) {
+                        formData.append('logo', { uri: asset.uri, name: fileName, type: type } as any);
+                    }
+                } else {
+                    formData.append('logo', { uri: asset.uri, name: fileName, type: type } as any);
+                }
+
+                setIsUploadingLogo(true);
+                try {
+                    const response = await uploadOrgLogoApi(formData) as any;
+                    if (response?.status || response?.data?.status) {
+                        const newLogo = response?.data?.data?.logo || response?.data?.logo || asset.uri;
+                        setLogo(newLogo);
+                        dispatch(showToast({ message: 'Organization logo updated!', type: 'success' }));
+                    } else {
+                        dispatch(showToast({ message: response?.data?.message || 'Failed to upload logo.', type: 'error' }));
+                    }
+                } catch (error) {
+                    console.error('Logo upload error:', error);
+                    dispatch(showToast({ message: 'Failed to upload logo.', type: 'error' }));
+                } finally {
+                    setIsUploadingLogo(false);
+                }
+            }
+        } catch (error) {
+            console.error('Image picker error:', error);
+        }
+    };
 
     const handleSave = async () => {
         try {
@@ -762,7 +837,7 @@ function OrgProfileScreen({ onBack }: { onBack: () => void }) {
     };
 
     return (
-        <View style={[styles.editProfileContainer, { paddingTop: insets.top }]}>
+        <View style={[styles.editProfileContainer, { paddingTop: Math.max(insets.top, Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 10 : 0) }]}>
             <View style={styles.editProfileHeader}>
                 <TouchableOpacity onPress={onBack}>
                     <ArrowLeft size={24} color="#111827" />
@@ -772,6 +847,24 @@ function OrgProfileScreen({ onBack }: { onBack: () => void }) {
             </View>
 
             <ScrollView contentContainerStyle={styles.editProfileContent}>
+                <View style={styles.avatarEditContainer}>
+                    <View style={styles.largeAvatar}>
+                        {logo ? (
+                            <Image source={{ uri: logo }} style={styles.largeAvatarImage} />
+                        ) : (
+                            <Building2 size={40} color="#0e7490" />
+                        )}
+                        {isUploadingLogo && (
+                            <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255,255,255,0.6)', justifyContent: 'center', alignItems: 'center', borderRadius: 50 }]}>
+                                <ActivityIndicator color="#0e7490" />
+                            </View>
+                        )}
+                    </View>
+                    <TouchableOpacity style={styles.editAvatarBtn} onPress={handleEditLogo} disabled={isUploadingLogo}>
+                        <Text style={styles.editAvatarText}>{isUploadingLogo ? 'Uploading...' : 'Change Logo'}</Text>
+                    </TouchableOpacity>
+                </View>
+
                 <View style={styles.profileInputGroup}>
                     <Text style={styles.profileInputLabel}>Organization Name</Text>
                     <TextInput
@@ -892,7 +985,7 @@ function ExpertProfileScreen({ onBack }: { onBack: () => void }) {
     };
 
     return (
-        <View style={[styles.editProfileContainer, { paddingTop: insets.top }]}>
+        <View style={[styles.editProfileContainer, { paddingTop: Math.max(insets.top, Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 10 : 0) }]}>
             <View style={styles.editProfileHeader}>
                 <TouchableOpacity onPress={onBack}>
                     <ArrowLeft size={24} color="#111827" />

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 
 import CustomAlert from '../utils/CustomAlert';
 const Alert = CustomAlert;
-import { StyleSheet, View, Text, TouchableOpacity, Share, Image } from 'react-native';;
+import { StyleSheet, View, Text, TouchableOpacity, Share, Image } from 'react-native';
 import { Heart, MessageCircle, Share2, Bell, Eye } from 'lucide-react-native';
 import {
   useToggleTopicLikeMutation,
@@ -12,7 +12,7 @@ import { useDispatch } from 'react-redux';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../navigation/types';
-import { showToast } from '@/store/slices/uiSlice';
+import { showToast } from '../store/slices/uiSlice';
 
 
 interface TopicCardProps {
@@ -131,10 +131,10 @@ export function TopicCard({ topic, readOnly, onTopicPress }: TopicCardProps) {
             <MessageCircle size={14} color="#9ca3af" />
             <Text style={styles.statTextSmall}>{topic.comments?.length || 0}</Text>
           </View>
-          <View style={styles.statItemRow}>
+          {/* <View style={styles.statItemRow}>
             <Eye size={14} color="#9ca3af" />
             <Text style={styles.statTextSmall}>124</Text>
-          </View>
+          </View> */}
         </View>
       </View>
     </TouchableOpacity>

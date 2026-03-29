@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView, FlatList, ActivityIndicator, TextInput, Platform, Modal } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView, FlatList, ActivityIndicator, TextInput, Platform, Modal, StatusBar } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
     Plus,
@@ -198,9 +198,9 @@ export function FeedScreen({ route }: any) {
             onConfirm: async () => {
                 try {
                     const response = await deleteActivity(id).unwrap();
-                    if(response?.status){
+                    if (response?.status) {
                         dispatch(showToast({ message: response?.message || 'Activity deleted successfully', type: 'success' }));
-                    }else{
+                    } else {
                         dispatch(showToast({ message: response?.message || 'Failed to delete activity', type: 'error' }));
                     }
                 } catch (err: any) {
@@ -456,10 +456,10 @@ export function FeedScreen({ route }: any) {
                                     <Text style={styles.analyticsLabel}>MEMBERS</Text>
                                     <Text style={styles.analyticsValue}>{communityAnalytics?.totalMembers || 0}</Text>
                                 </View>
-                                <View style={styles.analyticsItem}>
+                                {/* <View style={styles.analyticsItem}>
                                     <Text style={styles.analyticsLabel}>ONLINE</Text>
                                     <Text style={styles.analyticsValue}>{communityAnalytics?.onlineMembers || 0}</Text>
-                                </View>
+                                </View> */}
                                 <View style={styles.analyticsItem}>
                                     <Text style={styles.analyticsLabel}>JOINED</Text>
                                     <Text style={styles.analyticsValue}>{communityAnalytics?.dateJoined ? new Date(communityAnalytics.dateJoined).getFullYear() : '--'}</Text>
@@ -665,7 +665,7 @@ export function FeedScreen({ route }: any) {
     );
 
     return (
-        <View style={[styles.screenContainer, { paddingTop: insets.top }]}>
+        <View style={[styles.screenContainer, { paddingTop: Math.max(insets.top, Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 10 : 0) }]}>
             {communitiesData?.communities && activeSubTab !== 'activities' && (
                 <View style={[styles.communitySelectorContainer, !isLoggedIn && { borderBottomWidth: 0, paddingBottom: 0, backgroundColor: 'transparent' }]}>
                     {isLoggedIn ? (
@@ -787,6 +787,7 @@ export function FeedScreen({ route }: any) {
                 ListFooterComponent={() => {
                     if ((activeSubTab === 'topics' || activeSubTab === 'communities' || activeSubTab === 'activities') && listData) {
                         const totalPages = (listData as any).totalPages || (listData as any).pages || 1;
+                        if (totalPages <= 1) return null;
                         return (
                             <View style={styles.paginationContainer}>
                                 <TouchableOpacity

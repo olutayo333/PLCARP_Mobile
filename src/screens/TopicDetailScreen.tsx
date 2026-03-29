@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useSelector } from 'react-redux';
 import { RootState } from '../store';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import CustomAlert from '../utils/CustomAlert';
 const Alert = CustomAlert;
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, Share, Image, useWindowDimensions } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, Share, Image, useWindowDimensions, Modal, StatusBar } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../navigation/types';
@@ -17,6 +17,7 @@ import {
     Flag,
     Send,
     Trash2,
+    X,
 } from 'lucide-react-native';
 import {
     useGetTopicByIdQuery,
@@ -28,6 +29,8 @@ import {
     useDeleteTopicMutation,
     useSearchCommunityMembersQuery,
 } from '../services/communityApi';
+import { useDispatch, useSelector } from 'react-redux';
+import { showToast } from '../store/slices/uiSlice';
 import { Skeleton } from '../components/common/Skeleton';
 
 interface TopicDetailScreenProps {
@@ -37,9 +40,11 @@ interface TopicDetailScreenProps {
 }
 
 export function TopicDetailScreen({ communityId, topicId, onBack }: TopicDetailScreenProps) {
+    const dispatch = useDispatch();
     const { height: screenHeight } = useWindowDimensions();
     const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
     const isLoggedIn = useSelector((state: RootState) => state.user.isLoggedIn);
+    const insets = useSafeAreaInsets();
     const user = useSelector((state: RootState) => state.user.user);
     const { data: topic, isLoading } = useGetTopicByIdQuery({ communityId, topicId });
     const { data: mentions } = useGetMentionsQuery(undefined, { skip: !isLoggedIn });
@@ -58,6 +63,11 @@ export function TopicDetailScreen({ communityId, topicId, onBack }: TopicDetailS
     const [showMentions, setShowMentions] = useState(false);
     const [debouncedMentionQuery, setDebouncedMentionQuery] = useState('');
     const [mentionedUsers, setMentionedUsers] = useState<{ id: string; fullName: string }[]>([]);
+
+    // Report States
+    const [isReportModalVisible, setIsReportModalVisible] = useState(false);
+    const [reportReason, setReportReason] = useState('');
+    const [isReporting, setIsReporting] = useState(false);
 
     useEffect(() => {
         const timer = setTimeout(() => {
@@ -183,30 +193,36 @@ export function TopicDetailScreen({ communityId, topicId, onBack }: TopicDetailS
     };
 
     const handleReport = () => {
-        Alert.prompt(
-            'Report Topic',
-            'Please enter the reason for reporting this topic:',
-            [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                    text: 'Report',
-                    onPress: async (reason) => {
-                        if (!reason) return;
-                        try {
-                            const response = await reportTopic({ communityId, topicId, data: { reason } }).unwrap();
-                            if (response?.status) {
-                                Alert.alert('Success', response.message || 'Topic reported successfully');
-                            } else {
-                                Alert.alert('Error', response?.message || 'Failed to report topic');
-                            }
-                        } catch (error: any) {
-                            const serverError = error?.data?.message || 'Failed to report topic';
-                            Alert.alert('Error', serverError);
-                        }
-                    }
-                }
-            ]
-        );
+        if (!isLoggedIn) {
+            handleGuestAction('report');
+            return;
+        }
+        setReportReason('');
+        setIsReportModalVisible(true);
+    };
+
+    const submitReport = async () => {
+        if (!reportReason.trim()) {
+            Alert.alert('Error', 'Please enter a reason for reporting');
+            return;
+        }
+        setIsReporting(true);
+        try {
+            const response = await reportTopic({ communityId, topicId, data: { reason: reportReason.trim() } }).unwrap();
+            setIsReportModalVisible(false);
+            if (response?.status) {
+                //Alert.alert('Success', response.message || 'Topic reported successfully');
+                dispatch(showToast({ message: response?.message || 'Topic reported successfully', type: 'success' }));
+
+            } else {
+                Alert.alert('Error', response?.message || 'Failed to report topic');
+            }
+        } catch (error: any) {
+            const serverError = error?.data?.message || 'Failed to report topic';
+            Alert.alert('Error', serverError);
+        } finally {
+            setIsReporting(false);
+        }
     };
 
     const handleShare = async () => {
@@ -261,7 +277,7 @@ export function TopicDetailScreen({ communityId, topicId, onBack }: TopicDetailS
     };
 
     const DetailSkeleton = () => (
-        <View style={styles.detailContainer}>
+        <View style={[styles.detailContainer, { paddingTop: Math.max(insets.top, Platform.OS === 'android' ? StatusBar.currentHeight || 0 : 0) }]}>
             <View style={styles.detailHeader}>
                 <Skeleton width={24} height={24} borderRadius={12} />
                 <Skeleton width="60%" height={20} />
@@ -321,12 +337,60 @@ export function TopicDetailScreen({ communityId, topicId, onBack }: TopicDetailS
             </Text>
         );
     };
+    const renderReportModal = () => (
+        <Modal
+            visible={isReportModalVisible}
+            transparent={true}
+            animationType="fade"
+            onRequestClose={() => setIsReportModalVisible(false)}
+        >
+            <View style={styles.modalOverlay}>
+                <View style={styles.modalContent}>
+                    <View style={styles.modalHeader}>
+                        <Text style={styles.modalTitle}>Report Topic</Text>
+                        <TouchableOpacity onPress={() => setIsReportModalVisible(false)}>
+                            <X size={24} color="#374151" />
+                        </TouchableOpacity>
+                    </View>
+                    <View style={styles.modalBody}>
+                        <Text style={styles.modalSubTitle}>Reason for reporting</Text>
+                        <TextInput
+                            style={styles.reportInput}
+                            placeholder="Tell us why you're reporting this topic..."
+                            value={reportReason}
+                            onChangeText={setReportReason}
+                            multiline
+                            numberOfLines={4}
+                            autoFocus
+                        />
+                        <View style={styles.modalActions}>
+                            <TouchableOpacity
+                                style={styles.cancelBtn}
+                                onPress={() => setIsReportModalVisible(false)}
+                                disabled={isReporting}
+                            >
+                                <Text style={styles.cancelBtnText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.reportSubmitBtn, isReporting && { opacity: 0.7 }]}
+                                onPress={submitReport}
+                                disabled={isReporting}
+                            >
+                                {isReporting ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.reportSubmitBtnText}>Report</Text>}
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </View>
+        </Modal>
+    );
 
     if (isLoading) return <DetailSkeleton />;
     if (!topic) return <View style={styles.centered}><Text>Topic not found</Text></View>;
 
     return (
-        <View style={styles.detailContainer}>
+        <View style={[styles.detailContainer, { paddingTop: Math.max(insets.top, Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 10 : 0) }]}>
+            {renderReportModal()}
             <View style={styles.detailHeader}>
                 <TouchableOpacity onPress={onBack}>
                     <ArrowLeft size={24} color="#374151" />
@@ -799,9 +863,81 @@ const styles = StyleSheet.create({
         fontSize: 10,
         color: '#4f46e5',
         fontWeight: 'bold',
-        textTransform: 'uppercase',
+    },
+    // Modal Styles
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'center',
+        padding: 20,
+    },
+    modalContent: {
+        backgroundColor: '#fff',
+        borderRadius: 16,
+        overflow: 'hidden',
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: '#f3f4f6',
+    },
+    modalTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: '#111827',
+    },
+    modalBody: {
+        padding: 20,
+    },
+    modalSubTitle: {
+        fontSize: 14,
+        color: '#6b7280',
+        marginBottom: 12,
+    },
+    reportInput: {
+        backgroundColor: '#f9fafb',
+        borderWidth: 1,
+        borderColor: '#e5e7eb',
+        borderRadius: 12,
+        padding: 12,
+        fontSize: 14,
+        color: '#111827',
+        textAlignVertical: 'top',
+        minHeight: 120,
+        marginBottom: 20,
+        ...Platform.select({
+            web: { outlineStyle: 'none' } as any,
+        }),
+    },
+    modalActions: {
+        flexDirection: 'row',
+        gap: 12,
+    },
+    cancelBtn: {
+        flex: 1,
+        paddingVertical: 12,
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: '#e5e7eb',
+        alignItems: 'center',
+    },
+    cancelBtnText: {
+        color: '#374151',
+        fontWeight: '600',
+    },
+    reportSubmitBtn: {
+        flex: 1,
+        backgroundColor: '#ef4444',
+        paddingVertical: 12,
+        borderRadius: 10,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    reportSubmitBtnText: {
+        color: '#fff',
+        fontWeight: '600',
     },
 });
-
-
-
