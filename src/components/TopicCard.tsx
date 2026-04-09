@@ -1,9 +1,7 @@
 import React, { useState } from 'react';
-
-import CustomAlert from '../utils/CustomAlert';
-const Alert = CustomAlert;
 import { StyleSheet, View, Text, TouchableOpacity, Share, Image } from 'react-native';
-import { Heart, MessageCircle, Share2, Bell, Eye } from 'lucide-react-native';
+import { Heart, MessageCircle, Share2, Bell, Clock } from 'lucide-react-native';
+import { decodeHtmlEntities } from '../utils/textUtils';
 import {
   useToggleTopicLikeMutation,
   CommunityTopicDetail
@@ -14,14 +12,28 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../navigation/types';
 import { showToast } from '../store/slices/uiSlice';
 
+const formatTimeAgo = (date: Date) => {
+  const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
+  let interval = seconds / 31536000;
+  if (interval > 1) return Math.floor(interval) + " years ago";
+  interval = seconds / 2592000;
+  if (interval > 1) return Math.floor(interval) + " months ago";
+  interval = seconds / 86400;
+  if (interval > 1) return Math.floor(interval) + " days ago";
+  interval = seconds / 3600;
+  if (interval > 1) return Math.floor(interval) + " hours ago";
+  interval = seconds / 60;
+  if (interval > 1) return Math.floor(interval) + " minutes ago";
+  return Math.floor(seconds) + " seconds ago";
+};
 
 interface TopicCardProps {
   topic: CommunityTopicDetail;
-  readOnly?: boolean;
-  onTopicPress?: (id: string) => void;
+  isLoggedIn?: boolean;
+  onPress?: () => void;
 }
 
-export function TopicCard({ topic, readOnly, onTopicPress }: TopicCardProps) {
+export function TopicCard({ topic, isLoggedIn, onPress }: TopicCardProps) {
   const dispatch = useDispatch();
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
 
@@ -29,24 +41,15 @@ export function TopicCard({ topic, readOnly, onTopicPress }: TopicCardProps) {
 
   const renderRichText = (text: string) => {
     if (!text) return null;
-    const parts = text.split(/(@[A-Za-z0-9_]+(?:\s[A-Za-z0-9_]+)*)/g);
-    return (
-      <Text>
-        {parts.map((part, index) => {
-          if (part.startsWith('@')) {
-            return <Text key={index} style={styles.mentionHighlight}>{part}</Text>;
-          }
-          return part;
-        })}
-      </Text>
-    );
+    const decoded = decodeHtmlEntities(text);
+    return <Text style={styles.title}>{decoded}</Text>;
   };
 
   const [isLiked, setIsLiked] = useState(topic.hasLiked || false);
   const [likes, setLikes] = useState(topic.likeCount || 0);
 
   const handleLike = async () => {
-    if (readOnly) {
+    if (!isLoggedIn) {
       navigation.navigate('Login');
       return;
     }
@@ -62,7 +65,6 @@ export function TopicCard({ topic, readOnly, onTopicPress }: TopicCardProps) {
       }).unwrap();
 
       if (!response?.status) {
-        // Revert state if server failed
         setIsLiked(topic.hasLiked || false);
         setLikes(topic.likeCount || 0);
         dispatch(showToast({ message: response?.message || 'Failed to like topic', type: 'error' }));
@@ -70,8 +72,7 @@ export function TopicCard({ topic, readOnly, onTopicPress }: TopicCardProps) {
     } catch (error: any) {
       setIsLiked(topic.hasLiked || false);
       setLikes(topic.likeCount || 0);
-      const serverError = error?.data?.message || 'Failed to like topic';
-      dispatch(showToast({ message: serverError, type: 'error' }));
+      dispatch(showToast({ message: error?.data?.message || 'Failed to like topic', type: 'error' }));
     }
   };
 
@@ -86,55 +87,63 @@ export function TopicCard({ topic, readOnly, onTopicPress }: TopicCardProps) {
     }
   };
 
+  const timeAgo = topic.createdAt
+    ? formatTimeAgo(new Date(topic.createdAt))
+    : '';
+
   return (
     <TouchableOpacity
-      style={styles.postCard}
-      onPress={() => onTopicPress?.(topic.id)}
-      disabled={readOnly}
-      activeOpacity={readOnly ? 1 : 0.7}
+      style={styles.container}
+      onPress={onPress}
+      activeOpacity={0.7}
     >
-      <View style={styles.topicCardTop}>
-        <View style={styles.avatarSmall}>
-          {topic.author.avatarUrl ? (
-            <Image
-              source={{ uri: topic.author.avatarUrl }}
-              style={styles.avatarImage}
-            />
-          ) : (
-            <Text style={styles.avatarTextSmall}>{topic.author.fullName.charAt(0)}</Text>
-          )}
-        </View>
-        <View style={styles.topicCardInfo}>
-          <Text style={styles.topicCardTitle} numberOfLines={3}>{renderRichText(topic.title)}</Text>
-
-          <Text style={styles.topicCardMeta} numberOfLines={1}>
-            by <Text style={!readOnly && styles.authorNameLink}>{topic.author.fullName}</Text> • {new Date(topic.createdAt).toLocaleDateString()}
-          </Text>
+      <View style={styles.header}>
+        <View style={styles.authorSection}>
+          <View style={styles.avatar}>
+            {topic.author.avatarUrl ? (
+              <Image source={{ uri: topic.author.avatarUrl }} style={styles.avatarImage} />
+            ) : (
+              <Text style={styles.avatarText}>{topic.author.fullName.charAt(0)}</Text>
+            )}
+          </View>
+          <View>
+            <Text style={styles.authorName}>{topic.author.fullName}</Text>
+            <View style={styles.metaRow}>
+              <Clock size={12} color="#9ca3af" />
+              <Text style={styles.timeText}>{timeAgo}</Text>
+            </View>
+          </View>
         </View>
       </View>
 
-      <View style={styles.topicCardActions}>
-        <View style={styles.leftActions}>
-          <TouchableOpacity style={styles.iconAction} onPress={handleLike}>
-            <Heart size={16} color={isLiked ? "#ef4444" : "#9ca3af"} fill={isLiked ? "#ef4444" : "transparent"} />
-            <Text style={[styles.actionText, isLiked && { color: '#ef4444' }]}>{likes}</Text>
+      <View style={styles.content}>
+        <Text style={styles.title}>{topic.title}</Text>
+        <Text style={styles.body} numberOfLines={3}>
+          {decodeHtmlEntities(topic.body || '')}
+        </Text>
+      </View>
+
+      <View style={styles.footer}>
+        <View style={styles.actions}>
+          <TouchableOpacity style={styles.actionBtn} onPress={handleLike}>
+            <Heart
+              size={18}
+              color={isLiked ? "#ef4444" : "#64748b"}
+              fill={isLiked ? "#ef4444" : "transparent"}
+            />
+            <Text style={[styles.actionText, isLiked && styles.activeActionText]}>
+              {likes}
+            </Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.iconAction} onPress={handleShare}>
-            <Share2 size={16} color="#9ca3af" />
-          </TouchableOpacity>
-          {/* <TouchableOpacity style={styles.iconAction}>
-            <Bell size={16} color="#9ca3af" />
-          </TouchableOpacity> */}
-        </View>
-        <View style={styles.rightActions}>
-          <View style={styles.statItemRow}>
-            <MessageCircle size={14} color="#9ca3af" />
-            <Text style={styles.statTextSmall}>{topic.comments?.length || 0}</Text>
+
+          <View style={styles.actionBtn}>
+            <MessageCircle size={18} color="#64748b" />
+            <Text style={styles.actionText}>{topic.comments?.length || 0}</Text>
           </View>
-          {/* <View style={styles.statItemRow}>
-            <Eye size={14} color="#9ca3af" />
-            <Text style={styles.statTextSmall}>124</Text>
-          </View> */}
+
+          <TouchableOpacity style={styles.actionBtn} onPress={handleShare}>
+            <Share2 size={18} color="#64748b" />
+          </TouchableOpacity>
         </View>
       </View>
     </TouchableOpacity>
@@ -142,19 +151,23 @@ export function TopicCard({ topic, readOnly, onTopicPress }: TopicCardProps) {
 }
 
 const styles = StyleSheet.create({
-  postCard: {
+  container: {
     backgroundColor: '#fff',
     padding: 16,
-    marginBottom: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#f3f4f6',
+    borderBottomWidth: 1,
+    borderColor: '#f1f5f9',
   },
-  topicCardTop: {
+  header: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     marginBottom: 12,
   },
-  avatarSmall: {
+  authorSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  avatar: {
     width: 36,
     height: 36,
     borderRadius: 18,
@@ -162,7 +175,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarTextSmall: {
+  avatarText: {
     color: '#fff',
     fontSize: 14,
     fontWeight: 'bold',
@@ -172,61 +185,57 @@ const styles = StyleSheet.create({
     height: 36,
     borderRadius: 18,
   },
-  topicCardInfo: {
-    marginLeft: 12,
-    flex: 1,
+  authorName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1e293b',
   },
-  topicCardTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#111827',
-  },
-  topicCardMeta: {
-    fontSize: 12,
-    color: '#6b7280',
-    marginTop: 2,
-  },
-  authorNameLink: {
-    color: '#0e7490',
-    fontWeight: '500',
-  },
-  topicCardActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#f3f4f6',
-  },
-  leftActions: {
-    flexDirection: 'row',
-    gap: 16,
-  },
-  rightActions: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  iconAction: {
+  metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+  },
+  timeText: {
+    fontSize: 12,
+    color: '#9ca3af',
+  },
+  content: {
+    marginBottom: 16,
+  },
+  title: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#0f172a',
+    marginBottom: 6,
+    lineHeight: 22,
+  },
+  body: {
+    fontSize: 14,
+    color: '#475569',
+    lineHeight: 20,
+  },
+  footer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  actions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 20,
+  },
+  actionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   actionText: {
-    fontSize: 12,
-    color: '#6b7280',
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#64748b',
   },
-  statItemRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  statTextSmall: {
-    fontSize: 12,
-    color: '#6b7280',
-  },
-  mentionHighlight: {
-    color: '#4f46e5',
-    fontWeight: '700',
+  activeActionText: {
+    color: '#ef4444',
   },
 });
 

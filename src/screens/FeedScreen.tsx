@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, ScrollView, FlatList, ActivityIndicator, TextInput, Platform, Modal, StatusBar } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -17,6 +17,11 @@ import {
     X,
     Edit2,
     Trash2,
+    Heart,
+    Quote,
+    AlertCircle,
+    Star,
+    Flag,
 } from 'lucide-react-native';
 
 import {
@@ -29,16 +34,17 @@ import {
     useGetMentionsQuery,
     useSubscribeToCommunityMutation,
     useUnsubscribeFromCommunityMutation,
-    useGetOrganizationActivitiesQuery,
-    useGetMyOrganizationActivitiesQuery,
-    usePostOrganizationActivityMutation,
-    useUpdateOrganizationActivityMutation,
-    useDeleteOrganizationActivityMutation,
+    useGetActivityFeedQuery,
+    useToggleCommentLikeMutation,
+    useReportCommentMutation,
+    CommunityActivityFeedItem,
 } from '../services/communityApi';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '../store';
 import { useGetUserProfileQuery } from '../services/profileApi';
 import { Skeleton } from '../components/common/Skeleton';
+import { decodeHtmlEntities } from '../utils/textUtils';
+import { ReportModal } from '../components/ReportModal';
 import { TopicCard } from '../components/TopicCard';
 import { CommunityCard } from '../components/CommunityCard';
 import { useNavigation } from '@react-navigation/native';
@@ -46,6 +52,7 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../navigation/types';
 import { showToast } from '../store/slices/uiSlice';
 import CustomAlert from '../utils/CustomAlert';
+import { socketService } from '../services/socketService';
 
 const Alert = CustomAlert;
 
@@ -88,6 +95,7 @@ function GuestWelcomeBanner({ navigation }: { navigation: any }) {
 export function FeedScreen({ route }: any) {
     const insets = useSafeAreaInsets();
     const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
+    const flatListRef = useRef<FlatList>(null);
     const [selectedCommunityId, setSelectedCommunityId] = useState<string | null>(null);
     const [activeSubTab, setActiveSubTab] = useState('topics');
 
@@ -111,6 +119,7 @@ export function FeedScreen({ route }: any) {
     const showConfirm = (cfg: ConfirmConfig) => setConfirmModal(cfg);
     const dismissConfirm = () => setConfirmModal(null);
 
+    const [communityFilter, setCommunityFilter] = useState<'all' | 'subscribed'>('all');
     const [searchQuery, setSearchQuery] = useState('');
     const [effectiveSearch, setEffectiveSearch] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
@@ -130,6 +139,44 @@ export function FeedScreen({ route }: any) {
         activity: '',
         id: ''
     });
+
+    const [toggleCommentLike] = useToggleCommentLikeMutation();
+    const [reportCommentMutation, { isLoading: isReporting }] = useReportCommentMutation();
+    const [isReportModalVisible, setIsReportModalVisible] = useState(false);
+    const [reportingCommentId, setReportingCommentId] = useState<string | null>(null);
+
+    const handleReportClick = (commentId: string) => {
+        if (!isLoggedIn) {
+            Alert.alert('Login Required', 'Please login to report comments.');
+            return;
+        }
+        setReportingCommentId(commentId);
+        setIsReportModalVisible(true);
+    };
+
+    const submitReport = async (reason: string) => {
+        if (!reportingCommentId) return;
+
+        try {
+            const response = await reportCommentMutation({
+                communityId: '', // API handles lookup by commentId usually
+                topicId: '',
+                commentId: reportingCommentId,
+                data: { reason }
+            }).unwrap();
+
+            if (response?.status) {
+                dispatch(showToast({ message: 'Comment reported successfully', type: 'success' }));
+            } else {
+                dispatch(showToast({ message: response?.message || 'Failed to report', type: 'error' }));
+            }
+        } catch (error: any) {
+            dispatch(showToast({ message: error?.data?.message || 'Failed to report', type: 'error' }));
+        } finally {
+            setIsReportModalVisible(false);
+            setReportingCommentId(null);
+        }
+    };
 
     useEffect(() => {
         const timer = setTimeout(() => {
@@ -158,109 +205,50 @@ export function FeedScreen({ route }: any) {
         setCurrentPage(1);
     }, [activeFilter]);
 
+    useEffect(() => {
+        flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+    }, [currentPage, activeSubTab, selectedCommunityId, activeFilter, communityFilter]);
+
+    // Real-time states
+    const [realtimeTopics, setRealtimeTopics] = useState<any[]>([]);
+    const [realtimeOnlineCount, setRealtimeOnlineCount] = useState<number | null>(null);
+
+    useEffect(() => {
+        if (!selectedCommunityId) return;
+        socketService.joinCommunity(selectedCommunityId);
+
+        // Reset local real-time state for the new room
+        setRealtimeTopics([]);
+        setRealtimeOnlineCount(null);
+
+        const onPresenceUpdated = (data: any) => {
+            if (data.communityId === selectedCommunityId) {
+                setRealtimeOnlineCount(data.onlineCount);
+            }
+        };
+
+        const onTopicNew = (topic: any) => {
+            if (topic.communityId === selectedCommunityId) {
+                setRealtimeTopics((prev) => [topic, ...prev]);
+            }
+        };
+
+        socketService.on('presence:updated', onPresenceUpdated);
+        socketService.on('topic:new', onTopicNew);
+
+        return () => {
+            socketService.leaveCommunity(selectedCommunityId);
+            socketService.off('presence:updated', onPresenceUpdated);
+            socketService.off('topic:new', onTopicNew);
+        };
+    }, [selectedCommunityId]);
+
     const combinedSearch = useMemo(() => {
         return [effectiveSearch, categorySearch].filter(Boolean).join(' ') || undefined;
     }, [effectiveSearch, categorySearch]);
 
     const [subscribe] = useSubscribeToCommunityMutation();
     const [unsubscribe] = useUnsubscribeFromCommunityMutation();
-
-    const [postActivity, { isLoading: isPosting }] = usePostOrganizationActivityMutation();
-    const [updateActivity, { isLoading: isUpdating }] = useUpdateOrganizationActivityMutation();
-    const [deleteActivity] = useDeleteOrganizationActivityMutation();
-
-    const handleOpenCreateActivity = () => {
-        setActivityFormMode('create');
-        setActivityFormData({ sector: '', who: '', where: '', when: new Date().getFullYear().toString(), activity: '', id: '' });
-        setIsActivityFormVisible(true);
-    };
-
-    const handleOpenEditActivity = (item: any) => {
-        setActivityFormMode('edit');
-        setActivityFormData({
-            sector: item.sector || '',
-            who: item.who || '',
-            where: item.where || '',
-            when: (item.when || new Date().getFullYear()).toString(),
-            activity: item.activity || '',
-            id: item.id
-        });
-        setIsActivityFormVisible(true);
-    };
-
-    const handleConfirmDeleteActivity = (id: string, e?: any) => {
-        if (e && e.stopPropagation) e.stopPropagation();
-        showConfirm({
-            title: 'Delete Activity',
-            message: 'Are you sure you want to delete this activity record?',
-            confirmText: 'Delete',
-            danger: true,
-            onConfirm: async () => {
-                try {
-                    const response = await deleteActivity(id).unwrap();
-                    if (response?.status) {
-                        dispatch(showToast({ message: response?.message || 'Activity deleted successfully', type: 'success' }));
-                    } else {
-                        dispatch(showToast({ message: response?.message || 'Failed to delete activity', type: 'error' }));
-                    }
-                } catch (err: any) {
-                    dispatch(showToast({ message: err.data?.message || 'Failed to delete activity', type: 'error' }));
-                }
-            }
-        });
-    };
-
-    const handleSubmitActivity = async () => {
-        const { sector, who, where, when, activity } = activityFormData;
-        if (!sector.trim()) {
-            dispatch(showToast({ message: 'Please specify the sector', type: 'error' }));
-            return;
-        }
-        if (!who.trim()) {
-            dispatch(showToast({ message: 'Please specify target beneficiaries (Who)', type: 'error' }));
-            return;
-        }
-        if (!where.trim()) {
-            dispatch(showToast({ message: 'Please specify the location (Where)', type: 'error' }));
-            return;
-        }
-        if (!when.trim()) {
-            dispatch(showToast({ message: 'Please provide the year (When)', type: 'error' }));
-            return;
-        }
-        if (!activity.trim()) {
-            dispatch(showToast({ message: 'Please provide an activity description', type: 'error' }));
-            return;
-        }
-
-        const payload = {
-            sector: sector.trim(),
-            who: who.trim(),
-            where: where.trim(),
-            when: parseInt(when),
-            activity: activity.trim()
-        };
-        try {
-            if (activityFormMode === 'create') {
-                const response = await postActivity(payload).unwrap();
-                if (response.status) {
-                    dispatch(showToast({ message: response.message || 'Activity posted successfully', type: 'success' }));
-                } else {
-                    dispatch(showToast({ message: response.message || 'Failed to post activity', type: 'error' }));
-                }
-            } else {
-                const response = await updateActivity({ id: activityFormData.id, data: payload }).unwrap();
-                if (response.status) {
-                    dispatch(showToast({ message: response.message || 'Activity updated successfully', type: 'success' }));
-                } else {
-                    dispatch(showToast({ message: response.message || 'Failed to update activity', type: 'error' }));
-                }
-            }
-            setIsActivityFormVisible(false);
-        } catch (err: any) {
-            dispatch(showToast({ message: err.data?.message || 'Failed to save activity', type: 'error' }));
-        }
-    };
 
     const handleCommunityAction = async (community: any) => {
         if (!isLoggedIn) {
@@ -336,7 +324,7 @@ export function FeedScreen({ route }: any) {
     const { data: generalAnalytics } = useGetGeneralAnalyticsQuery(undefined, { skip: !isLoggedIn || selectedCommunityId !== null });
     const { data: communityAnalytics } = useGetCommunityAnalyticsQuery(selectedCommunityId || '', { skip: !selectedCommunityId });
     const { data: userProfile } = useGetUserProfileQuery(undefined, { skip: !isLoggedIn });
-    const { data: subscriptions, refetch: refetchSubscriptions, isLoading: isLoadingSubscriptions, isFetching: isFetchingSubscriptions } = useGetMySubscriptionsQuery(undefined, { skip: !isLoggedIn || activeSubTab !== 'subscribed' });
+    const { data: subscriptions, refetch: refetchSubscriptions, isLoading: isLoadingSubscriptions, isFetching: isFetchingSubscriptions } = useGetMySubscriptionsQuery(undefined, { skip: !isLoggedIn || activeSubTab !== 'communities' || communityFilter !== 'subscribed' });
     const { data: mentions, isLoading: isLoadingMentions, isFetching: isFetchingMentions, refetch: refetchMentions } = useGetMentionsQuery(undefined, { skip: !isLoggedIn || activeSubTab !== 'mentions' });
 
     const {
@@ -351,26 +339,11 @@ export function FeedScreen({ route }: any) {
     }, { skip: activeSubTab !== 'communities' });
 
     const {
-        data: publicActivitiesData,
-        isLoading: isLoadingPublicActivities,
-        isFetching: isFetchingPublicActivities,
-        refetch: refetchPublicActivities
-    } = useGetOrganizationActivitiesQuery({
-        search: effectiveSearch,
-        page: currentPage,
-        limit: ITEMS_PER_PAGE
-    }, { skip: activeSubTab !== 'activities' || (isLoggedIn && userProfile?.role === 'NGO_MEMBER') });
-
-    const {
-        data: myActivitiesData,
-        isLoading: isLoadingMyActivities,
-        isFetching: isFetchingMyActivities,
-        refetch: refetchMyActivities
-    } = useGetMyOrganizationActivitiesQuery({
-        search: effectiveSearch,
-        page: currentPage,
-        limit: ITEMS_PER_PAGE
-    }, { skip: activeSubTab !== 'activities' || userProfile?.role !== 'NGO_MEMBER' });
+        data: activityFeedData,
+        isLoading: isLoadingActivityFeed,
+        isFetching: isFetchingActivityFeed,
+        refetch: refetchActivityFeed
+    } = useGetActivityFeedQuery(undefined, { skip: activeSubTab !== 'activities' });
 
     const isNgoMember = isLoggedIn && userProfile?.role === 'NGO_MEMBER';
 
@@ -387,85 +360,78 @@ export function FeedScreen({ route }: any) {
         return communitiesData?.communities?.find((c: any) => c.id === selectedCommunityId);
     }, [selectedCommunityId, communitiesData]);
 
-    const isFetching: boolean = activeSubTab === 'communities' ? (isFetchingCommunitiesList ?? false) :
+    const isFetching: boolean = activeSubTab === 'communities'
+        ? (communityFilter === 'subscribed' ? (isFetchingSubscriptions ?? false) : (isFetchingCommunitiesList ?? false)) :
         activeSubTab === 'mentions' ? (isFetchingMentions ?? false) :
-            activeSubTab === 'subscribed' ? (isFetchingSubscriptions ?? false) :
-                activeSubTab === 'activities' ? (isNgoMember ? (isFetchingMyActivities ?? false) : (isFetchingPublicActivities ?? false)) :
-                    (selectedCommunityId ? (isFetchingCommunity ?? false) : (isFetchingGlobal ?? false));
+            activeSubTab === 'activities' ? (isFetchingActivityFeed ?? false) :
+                (selectedCommunityId ? (isFetchingCommunity ?? false) : (isFetchingGlobal ?? false));
 
-    const isLoading: boolean = activeSubTab === 'communities' ? (isLoadingCommunitiesList ?? false) :
+    const isLoading: boolean = activeSubTab === 'communities'
+        ? (communityFilter === 'subscribed' ? (isLoadingSubscriptions ?? false) : (isLoadingCommunitiesList ?? false)) :
         activeSubTab === 'mentions' ? (isLoadingMentions ?? false) :
-            activeSubTab === 'subscribed' ? (isLoadingSubscriptions ?? false) :
-                activeSubTab === 'activities' ? (isNgoMember ? (isLoadingMyActivities ?? false) : (isLoadingPublicActivities ?? false)) :
-                    (selectedCommunityId ? (isLoadingCommunityTopics ?? false) : (isLoadingGlobal ?? false));
+            activeSubTab === 'activities' ? (isLoadingActivityFeed ?? false) :
+                (selectedCommunityId ? (isLoadingCommunityTopics ?? false) : (isLoadingGlobal ?? false));
     const topicsData = selectedCommunityId ? communityTopicsData : globalTopicsData;
     const listData = activeSubTab === 'communities' ? communitiesListData :
-        activeSubTab === 'activities' ? (isNgoMember ? myActivitiesData : publicActivitiesData) :
+        activeSubTab === 'activities' ? activityFeedData :
             topicsData;
-    const topics = topicsData?.topics;
+    // Combine fetched topics with real-time new topics
+    const topics = [
+        ...realtimeTopics,
+        ...(topicsData?.topics || [])
+    ];
     const refetch = () => {
-        if (activeSubTab === 'communities') return refetchCommunitiesList();
+        if (activeSubTab === 'communities') {
+            return communityFilter === 'subscribed' ? refetchSubscriptions() : refetchCommunitiesList();
+        }
         if (activeSubTab === 'mentions') return refetchMentions();
         if (activeSubTab === 'subscribed') return refetchSubscriptions();
-        if (activeSubTab === 'activities') return isNgoMember ? refetchMyActivities() : refetchPublicActivities();
+        if (activeSubTab === 'activities') return refetchActivityFeed();
         return selectedCommunityId ? refetchCommunity() : refetchGlobal();
     };
-
     const headerComponent = useMemo(() => (
         <View style={styles.feedHeaderContainer}>
             {isLoggedIn ? (
                 <>
-                    <View style={styles.pointsBadgeContainer}>
-                        <View style={styles.pointsBadge}>
-                            <View style={styles.pointsIconCircle}>
-                                <ShieldCheck size={14} color="#fff" />
-                            </View>
-                            <Text style={styles.pointsLabel}>Your Points</Text>
-                            <Text style={styles.pointsValue}>
-                                {userProfile?.pointsCount || 0} <Text style={styles.pointsUnit}>pts</Text>
+                    <View style={styles.headerTopRow}>
+                        <View style={styles.headerTitleContainer}>
+                            <Text style={styles.headerTitleStatic}>
+                                {selectedCommunity?.name || 'Community Forum'}
+                            </Text>
+                        </View>
+                        <View style={styles.pointsBadgeNew}>
+                            <Star size={16} color="#0e7490" fill="#0e7490" />
+                            <Text style={styles.pointsValueNew}>
+                                {userProfile?.pointsCount || 0} <Text style={styles.pointsUnitNew}>pts</Text>
                             </Text>
                         </View>
                     </View>
-                    <View style={styles.analyticsBar}>
-                        {selectedCommunityId === null ? (
-                            <>
-                                <View style={styles.analyticsItem}>
-                                    <Text style={styles.analyticsLabel}>TOTAL TOPICS</Text>
-                                    <Text style={styles.analyticsValue}>{generalAnalytics?.totalTopics || 0}</Text>
-                                </View>
-                                <View style={styles.analyticsItem}>
-                                    <Text style={styles.analyticsLabel}>COMMUNITIES</Text>
-                                    <Text style={styles.analyticsValue}>{generalAnalytics?.totalCommunities || 0}</Text>
-                                </View>
-                                <View style={styles.analyticsItem}>
-                                    <Text style={styles.analyticsLabel}>MEMBERS</Text>
-                                    <Text style={styles.analyticsValue}>{generalAnalytics?.totalMembers || 0}</Text>
-                                </View>
-                                <View style={styles.analyticsItem}>
-                                    <Text style={styles.analyticsLabel}>JOINED</Text>
-                                    <Text style={styles.analyticsValue}>{generalAnalytics?.myJoinedCommunities || 0}</Text>
-                                </View>
-                            </>
-                        ) : (
-                            <>
-                                <View style={styles.analyticsItem}>
-                                    <Text style={styles.analyticsLabel}>TOTAL TOPICS</Text>
-                                    <Text style={styles.analyticsValue}>{communityAnalytics?.totalTopics || 0}</Text>
-                                </View>
-                                <View style={styles.analyticsItem}>
-                                    <Text style={styles.analyticsLabel}>MEMBERS</Text>
-                                    <Text style={styles.analyticsValue}>{communityAnalytics?.totalMembers || 0}</Text>
-                                </View>
-                                {/* <View style={styles.analyticsItem}>
-                                    <Text style={styles.analyticsLabel}>ONLINE</Text>
-                                    <Text style={styles.analyticsValue}>{communityAnalytics?.onlineMembers || 0}</Text>
-                                </View> */}
-                                <View style={styles.analyticsItem}>
-                                    <Text style={styles.analyticsLabel}>JOINED</Text>
-                                    <Text style={styles.analyticsValue}>{communityAnalytics?.dateJoined ? new Date(communityAnalytics.dateJoined).getFullYear() : '--'}</Text>
-                                </View>
-                            </>
-                        )}
+
+                    <View style={styles.analyticsCard}>
+                        <View style={styles.analyticsColumn}>
+                            <Text style={styles.analyticsVal}>
+                                {selectedCommunityId ? (communityAnalytics?.totalTopics || 0) : (generalAnalytics?.totalTopics || 0)}
+                            </Text>
+                            <Text style={styles.analyticsLab}>TOPICS</Text>
+                        </View>
+                        <View style={styles.analyticsColumn}>
+                            <Text style={styles.analyticsVal}>
+                                {selectedCommunityId ? 0 : (generalAnalytics?.totalCommunities || 0)}
+                            </Text>
+                            <Text style={styles.analyticsLab}>{selectedCommunityId ? 'POSTS' : 'COMMUNITIES'}</Text>
+                        </View>
+                        <View style={styles.analyticsColumn}>
+                            <Text style={styles.analyticsVal}>
+                                {selectedCommunityId ? (communityAnalytics?.totalMembers || 0) : (generalAnalytics?.totalMembers || 0)}
+                            </Text>
+                            <Text style={styles.analyticsLab}>MEMBERS</Text>
+                        </View>
+                        <View style={styles.analyticsColumn}>
+                            <Text style={styles.analyticsVal}>
+                                {realtimeOnlineCount !== null ? realtimeOnlineCount : (selectedCommunityId ? (communityAnalytics?.onlineMembers || 0) : 0)}
+                            </Text>
+                            <Text style={styles.analyticsLab}>ONLINE</Text>
+                        </View>
                     </View>
                 </>
             ) : (
@@ -477,27 +443,18 @@ export function FeedScreen({ route }: any) {
                     <Search size={20} color="#9ca3af" />
                     <TextInput
                         style={[styles.searchInput, Platform.OS === 'web' ? { outlineStyle: 'none' } as any : null]}
-                        placeholder={`Search ${activeSubTab === 'communities' ? 'communities' : activeSubTab === 'activities' ? 'activities' : 'topics'}...`}
+                        placeholder={`Search ${activeSubTab === 'communities' ? 'communities' : 'topics'}...`}
                         value={searchQuery}
                         onChangeText={setSearchQuery}
                         placeholderTextColor="#9ca3af"
                     />
                 </View>
-                {activeSubTab === 'activities' && isNgoMember && (
-                    <TouchableOpacity
-                        style={styles.postActivityBtn}
-                        onPress={handleOpenCreateActivity}
-                    >
-                        <Plus size={18} color="#fff" />
-                        <Text style={styles.postActivityBtnText}>Post</Text>
-                    </TouchableOpacity>
-                )}
             </View>
 
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.subTabs} contentContainerStyle={styles.subTabsContent}>
-                {['Topics', 'Activities', 'Communities', 'Mentions', 'Subscribed'].map((tab) => {
+                {['Topics', 'Activities', 'Communities', 'Mentions'].map((tab) => {
                     const tabKey = tab.toLowerCase();
-                    if (!isLoggedIn && (tabKey === 'mentions' || tabKey === 'subscribed' || tabKey === 'activities')) return null;
+                    if (!isLoggedIn && (tabKey === 'mentions' || tabKey === 'activities')) return null;
                     return (
                         <TouchableOpacity
                             key={tab}
@@ -527,8 +484,29 @@ export function FeedScreen({ route }: any) {
                     </View>
                 </View>
             )}
+
+            {activeSubTab === 'communities' && isLoggedIn && (
+                <View style={styles.filtersContainer}>
+                    <View style={styles.filterRow}>
+                        {[
+                            { id: 'all', label: 'All' },
+                            { id: 'subscribed', label: 'Subscribed' }
+                        ].map((filter) => (
+                            <TouchableOpacity
+                                key={filter.id}
+                                style={[styles.filterPill, communityFilter === filter.id && styles.filterPillActive]}
+                                onPress={() => setCommunityFilter(filter.id as any)}
+                            >
+                                <Text style={[styles.filterPillText, communityFilter === filter.id && styles.filterPillTextActive]}>
+                                    {filter.label}
+                                </Text>
+                            </TouchableOpacity>
+                        ))}
+                    </View>
+                </View>
+            )}
         </View>
-    ), [isLoggedIn, generalAnalytics, communityAnalytics, userProfile, searchQuery, activeSubTab, activeFilter, categorySearch, navigation, selectedCommunityId]);
+    ), [isLoggedIn, generalAnalytics, communityAnalytics, userProfile, searchQuery, activeSubTab, activeFilter, communityFilter, categorySearch, navigation, selectedCommunityId]);
 
 
     const renderMentions = () => {
@@ -666,44 +644,19 @@ export function FeedScreen({ route }: any) {
 
     return (
         <View style={[styles.screenContainer, { paddingTop: Math.max(insets.top, Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 10 : 0) }]}>
-            {communitiesData?.communities && activeSubTab !== 'activities' && (
-                <View style={[styles.communitySelectorContainer, !isLoggedIn && { borderBottomWidth: 0, paddingBottom: 0, backgroundColor: 'transparent' }]}>
-                    {isLoggedIn ? (
-                        <TouchableOpacity
-                            style={styles.dropdownTrigger}
-                            onPress={() => setIsCommunityPickerVisible(true)}
-                        >
-                            <View style={styles.dropdownInner}>
-                                <Text style={styles.dropdownLabel}>COMMUNITY</Text>
-                                <View style={styles.dropdownValueRow}>
-                                    <Text style={styles.dropdownValue} numberOfLines={1}>
-                                        {selectedCommunity?.name || 'Global Feed'}
-                                    </Text>
-                                    <ChevronDown size={18} color="#0e7490" />
-                                </View>
-                            </View>
-                        </TouchableOpacity>
-                    ) : (
-                        <View style={styles.communityTab}>
-                            <Text style={[styles.communityTabText, { fontSize: 12, color: '#6b7280', fontWeight: 'bold' }]}>
-                                Global Feed
-                            </Text>
-                        </View>
-                    )}
-                </View>
-            )}
+            {/* Community Selector moved into headerComponent for layout parity */}
 
 
             <FlatList
+                ref={flatListRef}
                 data={(isFetching && currentPage === 1)
                     ? []
                     : (activeSubTab === 'topics'
                         ? (topics || [])
-                        : activeSubTab === 'communities' ? (communitiesListData?.communities || [])
+                        : activeSubTab === 'communities' ? (communityFilter === 'subscribed' ? (subscriptions?.map(c => ({ ...c, joined: true })) || []) : (communitiesListData?.communities || []))
                             : activeSubTab === 'mentions' ? (mentions || [])
-                                : activeSubTab === 'subscribed' ? (subscriptions || [])
-                                    : activeSubTab === 'activities' ? (isNgoMember ? myActivitiesData?.activities : publicActivitiesData?.activities) || []
-                                        : []
+                                : activeSubTab === 'activities' ? (activityFeedData || [])
+                                    : []
                     )
                 }
                 renderItem={({ item }: { item: any }) => {
@@ -711,11 +664,11 @@ export function FeedScreen({ route }: any) {
                         return (
                             <TopicCard
                                 topic={item}
-                                readOnly={!isLoggedIn}
-                                onTopicPress={(id) => {
+                                isLoggedIn={isLoggedIn}
+                                onPress={() => {
                                     navigation.navigate('TopicDetail', {
                                         communityId: item.communityId,
-                                        topicId: id
+                                        topicId: item.id
                                     });
                                 }}
                             />
@@ -726,7 +679,9 @@ export function FeedScreen({ route }: any) {
                             <CommunityCard
                                 community={item}
                                 isLoggedIn={isLoggedIn}
-                                onPress={() => handleCommunityAction(item)}
+                                onPress={() => navigation.navigate('CommunityDetail', { communityId: item.id })}
+                                onSubscribe={() => handleCommunityAction(item)}
+                                isJoined={communityFilter === 'subscribed' || !!item.joined || !!item.isJoined || !!item.isSubscribed}
                             />
                         );
                     }
@@ -738,43 +693,87 @@ export function FeedScreen({ route }: any) {
                     }
                     if (activeSubTab === 'activities') {
                         return (
-                            <TouchableOpacity
-                                style={styles.activityItem}
-                                onPress={() => setSelectedActivity(item)}
-                            >
-                                <View style={styles.activityIconBox}>
-                                    <MessageCircle size={20} color="#0e7490" />
-                                </View>
-                                <View style={{ flex: 1 }}>
-                                    <View style={styles.activityHeaderRow}>
-                                        <Text style={styles.activitySector}>{item.sector}</Text>
-                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                                            <Text style={styles.activityYear}>{item.when}</Text>
-                                            {isNgoMember && (
-                                                <View style={styles.activityActions}>
-                                                    <TouchableOpacity
-                                                        onPress={(e) => {
-                                                            e.stopPropagation();
-                                                            handleOpenEditActivity(item);
-                                                        }}
-                                                        style={styles.activityActionBtn}
-                                                    >
-                                                        <Edit2 size={16} color="#0e7490" />
-                                                    </TouchableOpacity>
-                                                    <TouchableOpacity
-                                                        onPress={(e) => handleConfirmDeleteActivity(item.id, e)}
-                                                        style={styles.activityActionBtn}
-                                                    >
-                                                        <Trash2 size={16} color="#dc2626" />
-                                                    </TouchableOpacity>
-                                                </View>
-                                            )}
-                                        </View>
+                            <View style={[styles.activityItem, { padding: 0, overflow: 'hidden' }]}>
+                                <TouchableOpacity
+                                    style={{ padding: 16, flexDirection: 'row' }}
+                                    activeOpacity={0.7}
+                                    onPress={() => {
+                                        const cId = item.community?.id || item.communityId || item.topic?.communityId || item.comment?.communityId;
+                                        const tId = item.topic?.id || item.topicId;
+                                        console.log('Activity Navigating to TopicDetail:', { cId, tId, item });
+                                        if (cId && tId) {
+                                            navigation.navigate('TopicDetail', {
+                                                communityId: cId,
+                                                topicId: tId
+                                            });
+                                        } else {
+                                            Alert.alert('Navigation Error', 'Missing topic or community ID in the activity payload.');
+                                        }
+                                    }}
+                                >
+                                    <View style={styles.activityIconBox}>
+                                        <MessageCircle size={20} color="#0e7490" />
                                     </View>
-                                    <Text style={styles.activityBody} numberOfLines={2}>{item.activity}</Text>
-                                    <Text style={styles.activityDate}>{item.createdAt ? new Date(item.createdAt).toLocaleDateString() : ''}</Text>
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={styles.activityRe} numberOfLines={1}>
+                                            Re: {item.topic?.title || item.topicTitle}
+                                        </Text>
+                                        <View style={styles.activityHeaderRow}>
+                                            <Text style={styles.activitySector}>{item.community?.name || item.communityName}</Text>
+                                            <Text style={styles.activityYear}>{new Date(item.createdAt).toLocaleDateString()}</Text>
+                                        </View>
+
+                                        <View style={{ marginBottom: 4 }}>
+                                            <Text style={{ fontSize: 13, fontWeight: '600', color: '#374151' }}>
+                                                {item.author?.fullName}
+                                            </Text>
+                                        </View>
+
+                                        {item.quote && (
+                                            <View style={styles.activityQuoteBox}>
+                                                <Text style={styles.activityQuoteAuthor}>
+                                                    {item.quote.author?.fullName}
+                                                </Text>
+                                                <Text style={styles.activityQuoteBody} numberOfLines={2}>
+                                                    {decodeHtmlEntities(item.quote.body)}
+                                                </Text>
+                                            </View>
+                                        )}
+
+                                        <Text style={styles.activityBody} numberOfLines={4}>{decodeHtmlEntities(item.body)}</Text>
+                                    </View>
+                                </TouchableOpacity>
+
+                                <View style={[styles.activityActionRow, { paddingHorizontal: 16, paddingBottom: 16, paddingLeft: 56 }]}>
+                                    <TouchableOpacity
+                                        style={styles.activityAction}
+                                        onPress={() => {
+                                            const cId = item.community?.id || item.communityId || item.topic?.communityId || item.comment?.communityId;
+                                            const tId = item.topic?.id || item.topicId;
+                                            if (cId && tId) {
+                                                navigation.navigate('TopicDetail', {
+                                                    communityId: cId,
+                                                    topicId: tId,
+                                                    quoteCommentId: item.id
+                                                });
+                                            } else {
+                                                Alert.alert('Navigation Error', 'Missing topic or community ID in the activity payload.');
+                                            }
+                                        }}
+                                    >
+                                        <MessageCircle size={14} color="#64748b" />
+                                        <Text style={styles.activityActionText}>Quote</Text>
+                                    </TouchableOpacity>
+
+                                    <TouchableOpacity
+                                        style={styles.activityAction}
+                                        onPress={() => handleReportClick(item.id)}
+                                    >
+                                        <Flag size={14} color="#64748b" />
+                                        <Text style={styles.activityActionText}>Report</Text>
+                                    </TouchableOpacity>
                                 </View>
-                            </TouchableOpacity>
+                            </View>
                         );
                     }
                     return null;
@@ -786,8 +785,11 @@ export function FeedScreen({ route }: any) {
                 ListHeaderComponent={headerComponent}
                 ListFooterComponent={() => {
                     if ((activeSubTab === 'topics' || activeSubTab === 'communities' || activeSubTab === 'activities') && listData) {
+                        // For communities, only show pagination if 'All' filter is selected
+                        if (activeSubTab === 'communities' && communityFilter !== 'all') return null;
+
                         const totalPages = (listData as any).totalPages || (listData as any).pages || 1;
-                        if (totalPages <= 1) return null;
+                        if (totalPages <= 1 || activeSubTab === 'activities') return null;
                         return (
                             <View style={styles.paginationContainer}>
                                 <TouchableOpacity
@@ -852,11 +854,13 @@ export function FeedScreen({ route }: any) {
                 }}
             />
 
-            {isLoggedIn && activeSubTab === 'topics' && (
-                <TouchableOpacity style={styles.fab} onPress={() => navigation.navigate('CreatePost')}>
-                    <Plus size={24} color="#fff" />
-                </TouchableOpacity>
-            )}
+            {
+                isLoggedIn && activeSubTab === 'topics' && (
+                    <TouchableOpacity style={styles.fab} onPress={() => navigation.navigate('CreatePost')}>
+                        <Plus size={24} color="#fff" />
+                    </TouchableOpacity>
+                )
+            }
 
             {/* ── Community Picker Modal ── */}
             <Modal
@@ -960,215 +964,89 @@ export function FeedScreen({ route }: any) {
                 </View>
             </Modal>
 
-            {/* Activity Detail Modal */}
-            <Modal
-                visible={!!selectedActivity}
-                transparent={true}
-                animationType="slide"
-                onRequestClose={() => setSelectedActivity(null)}
-            >
-                <View style={styles.pickerOverlay}>
-                    <View style={styles.detailModalContent}>
-                        <View style={styles.detailModalHeader}>
-                            <Text style={styles.detailModalTitle}>Activity Details</Text>
-                            <TouchableOpacity onPress={() => setSelectedActivity(null)}>
-                                <X size={24} color="#6b7280" />
-                            </TouchableOpacity>
-                        </View>
+            {/* ── Cross-Platform REPORT Modal ── */}
+            <ReportModal
+                visible={isReportModalVisible}
+                onClose={() => setIsReportModalVisible(false)}
+                onSubmit={submitReport}
+                isSubmitting={isReporting}
+            />
 
-                        <ScrollView style={styles.detailModalBody}>
-                            <View style={styles.detailSection}>
-                                <Text style={styles.detailLabel}>SECTOR</Text>
-                                <Text style={styles.detailValue}>{selectedActivity?.sector}</Text>
-                            </View>
-
-                            <View style={styles.detailSection}>
-                                <Text style={styles.detailLabel}>WHO</Text>
-                                <Text style={styles.detailValue}>{selectedActivity?.who}</Text>
-                            </View>
-
-                            <View style={styles.detailSection}>
-                                <Text style={styles.detailLabel}>WHERE</Text>
-                                <Text style={styles.detailValue}>{selectedActivity?.where}</Text>
-                            </View>
-
-                            <View style={styles.detailSection}>
-                                <Text style={styles.detailLabel}>WHEN</Text>
-                                <Text style={styles.detailValue}>{selectedActivity?.when}</Text>
-                            </View>
-
-                            <View style={styles.detailSection}>
-                                <Text style={styles.detailLabel}>ACTIVITY DESCRIPTION</Text>
-                                <Text style={styles.detailValue}>{selectedActivity?.activity}</Text>
-                            </View>
-                        </ScrollView>
-
-                        <TouchableOpacity
-                            style={styles.detailModalCloseBtn}
-                            onPress={() => setSelectedActivity(null)}
-                        >
-                            <Text style={styles.detailModalCloseText}>Close</Text>
-                        </TouchableOpacity>
-                    </View>
-                </View>
-            </Modal>
-
-            {/* NGO Activity Form Modal */}
-            <Modal
-                visible={isActivityFormVisible}
-                transparent
-                animationType="slide"
-                onRequestClose={() => setIsActivityFormVisible(false)}
-            >
-                <View style={styles.pickerOverlay}>
-                    <View style={styles.pickerCard}>
-                        <View style={styles.pickerHeader}>
-                            <Text style={styles.pickerTitle}>
-                                {activityFormMode === 'create' ? 'Post New Activity' : 'Edit Activity'}
-                            </Text>
-                            <TouchableOpacity onPress={() => setIsActivityFormVisible(false)}>
-                                <X size={24} color="#6b7280" />
-                            </TouchableOpacity>
-                        </View>
-
-                        <ScrollView style={{ padding: 16 }}>
-                            <View style={styles.formGroup}>
-                                <Text style={styles.formLabel}>Sector <Text style={{ color: '#ef4444' }}>*</Text></Text>
-                                <TextInput
-                                    style={styles.formInput}
-                                    placeholder="e.g. Health, Education"
-                                    value={activityFormData.sector}
-                                    onChangeText={(val) => setActivityFormData({ ...activityFormData, sector: val })}
-                                />
-                            </View>
-
-                            <View style={styles.formGroup}>
-                                <Text style={styles.formLabel}>Who <Text style={{ color: '#ef4444' }}>*</Text></Text>
-                                <TextInput
-                                    style={styles.formInput}
-                                    placeholder="Target beneficiaries"
-                                    value={activityFormData.who}
-                                    onChangeText={(val) => setActivityFormData({ ...activityFormData, who: val })}
-                                />
-                            </View>
-
-                            <View style={styles.formGroup}>
-                                <Text style={styles.formLabel}>Where <Text style={{ color: '#ef4444' }}>*</Text></Text>
-                                <TextInput
-                                    style={styles.formInput}
-                                    placeholder="Location"
-                                    value={activityFormData.where}
-                                    onChangeText={(val) => setActivityFormData({ ...activityFormData, where: val })}
-                                />
-                            </View>
-
-                            <View style={styles.formGroup}>
-                                <Text style={styles.formLabel}>When (Year) <Text style={{ color: '#ef4444' }}>*</Text></Text>
-                                <TextInput
-                                    style={styles.formInput}
-                                    placeholder="2024"
-                                    keyboardType="numeric"
-                                    value={activityFormData.when}
-                                    onChangeText={(val) => setActivityFormData({ ...activityFormData, when: val })}
-                                />
-                            </View>
-
-                            <View style={styles.formGroup}>
-                                <Text style={styles.formLabel}>Activity Description <Text style={{ color: '#ef4444' }}>*</Text></Text>
-                                <TextInput
-                                    style={[styles.formInput, { height: 100, textAlignVertical: 'top' }]}
-                                    placeholder="Describe the activity..."
-                                    multiline
-                                    value={activityFormData.activity}
-                                    onChangeText={(val) => setActivityFormData({ ...activityFormData, activity: val })}
-                                />
-                            </View>
-
-                            <TouchableOpacity
-                                style={[styles.formSubmitBtn, (isPosting || isUpdating) && { opacity: 0.7 }]}
-                                onPress={handleSubmitActivity}
-                                disabled={isPosting || isUpdating}
-                            >
-                                {isPosting || isUpdating ? (
-                                    <ActivityIndicator size="small" color="#fff" />
-                                ) : (
-                                    <Text style={styles.formSubmitText}>
-                                        {activityFormMode === 'create' ? 'Post Activity' : 'Update Activity'}
-                                    </Text>
-                                )}
-                            </TouchableOpacity>
-                            <View style={{ height: 40 }} />
-                        </ScrollView>
-                    </View>
-                </View>
-            </Modal>
-        </View >
+        </View>
     );
 }
 
 const styles = StyleSheet.create({
     screenContainer: {
         flex: 1,
-        backgroundColor: '#f9fafb',
+        backgroundColor: '#fff',
+        paddingBottom: 24,
     },
     feedHeaderContainer: {
         backgroundColor: '#fff',
     },
-    analyticsBar: {
+    headerTopRow: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
-        padding: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: '#f3f4f6',
-    },
-    analyticsItem: {
         alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 2,
+        marginBottom: 16,
     },
-    analyticsLabel: {
-        fontSize: 10,
-        color: '#6b7280',
+    headerTitleContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flex: 1,
+    },
+    headerTitleStatic: {
+        fontSize: 22,
         fontWeight: 'bold',
+        color: '#1e293b',
     },
-    analyticsValue: {
+    pointsBadgeNew: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#f1f5f9',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 12,
+        gap: 8,
+        borderWidth: 1,
+        borderColor: '#e2e8f0',
+    },
+    pointsValueNew: {
         fontSize: 16,
         fontWeight: 'bold',
-        color: '#111827',
+        color: '#0e7490',
     },
-    pointsBadgeContainer: {
-        paddingHorizontal: 16,
-        paddingTop: 16,
-        backgroundColor: '#fff',
+    pointsUnitNew: {
+        fontSize: 12,
+        color: '#64748b',
+        fontWeight: 'normal',
     },
-    pointsBadge: {
+    analyticsCard: {
+        backgroundColor: '#f1f5f9',
+        borderRadius: 20,
+        paddingVertical: 20,
+        paddingHorizontal: 10,
         flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: 'rgba(23, 117, 166, 0.1)',
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        borderRadius: 24,
-        alignSelf: 'flex-start',
-        gap: 8,
+        justifyContent: 'space-around',
+        marginBottom: 20,
     },
-    pointsIconCircle: {
-        backgroundColor: '#1775a6',
-        borderRadius: 12,
-        padding: 4,
+    analyticsColumn: {
         alignItems: 'center',
-        justifyContent: 'center',
+        flex: 1,
     },
-    pointsLabel: {
-        fontSize: 13,
+    analyticsVal: {
+        fontSize: 18,
         fontWeight: 'bold',
-        color: '#1775a6',
+        color: '#1e293b',
+        marginBottom: 4,
     },
-    pointsValue: {
-        fontSize: 15,
-        fontWeight: '900',
-        color: '#1775a6',
-    },
-    pointsUnit: {
-        fontSize: 11,
-        fontWeight: '600',
+    analyticsLab: {
+        fontSize: 10,
+        color: '#64748b',
+        fontWeight: 'bold',
+        letterSpacing: 0.5,
     },
     subTabs: {
         backgroundColor: '#fff',
@@ -1209,18 +1087,22 @@ const styles = StyleSheet.create({
         paddingHorizontal: 12,
         paddingVertical: 6,
         borderRadius: 20,
-        backgroundColor: '#f3f4f6',
+        backgroundColor: '#fff',
+        borderWidth: 1,
+        borderColor: '#e5e7eb',
     },
     filterPillActive: {
-        backgroundColor: '#4f46e5',
+        backgroundColor: '#e0f2fe',
+        borderColor: '#e0f2fe',
     },
     filterPillText: {
         fontSize: 12,
-        color: '#6b7280',
-        fontWeight: '500',
+        color: '#64748b',
+        fontWeight: '600',
     },
     filterPillTextActive: {
-        color: '#fff',
+        color: '#0e7490',
+        fontWeight: 'bold',
     },
     categoryScroller: {
         marginTop: 8,
@@ -1244,11 +1126,6 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: '#374151',
     },
-    // communitySelectorContainer: {
-    //     backgroundColor: '#fff',
-    //     borderBottomWidth: 1,
-    //     borderBottomColor: '#f3f4f6',
-    // },
     communitySelector: {
         paddingVertical: 12,
     },
@@ -1276,6 +1153,7 @@ const styles = StyleSheet.create({
     },
     feed: {
         padding: 16,
+        paddingBottom: 120, // Increased for safe area + nav parity
     },
     emptyContainer: {
         flex: 1,
@@ -1420,15 +1298,6 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: '#374151',
         marginBottom: 6,
-    },
-    formInput: {
-        backgroundColor: '#f9fafb',
-        borderWidth: 1,
-        borderColor: '#e5e7eb',
-        borderRadius: 8,
-        padding: 12,
-        fontSize: 16,
-        color: '#111827',
     },
     formSubmitBtn: {
         backgroundColor: '#0e7490',
@@ -1693,9 +1562,6 @@ const styles = StyleSheet.create({
         paddingVertical: 12,
         borderBottomWidth: 1,
         borderBottomColor: '#f3f4f6',
-        // backgroundColor: '#fff',
-        // borderBottomWidth: 1,
-        // borderBottomColor: '#f3f4f6',
     },
     dropdownTrigger: {
         backgroundColor: '#f9fafb',
@@ -1836,6 +1702,62 @@ const styles = StyleSheet.create({
     activityDate: {
         fontSize: 12,
         color: '#9ca3af',
+    },
+    activityQuoteBox: {
+        backgroundColor: '#f8fafc',
+        borderLeftWidth: 3,
+        borderLeftColor: '#0e7490',
+        padding: 8,
+        borderRadius: 8,
+        marginBottom: 8,
+    },
+    activityQuoteAuthor: {
+        fontSize: 11,
+        fontWeight: '700',
+        color: '#0e7490',
+        marginBottom: 2,
+    },
+    activityQuoteBody: {
+        fontSize: 11,
+        color: '#475569',
+        fontStyle: 'italic',
+    },
+    activityActionRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 10,
+        gap: 16,
+        borderTopWidth: 1,
+        borderTopColor: '#f1f5f9',
+        paddingTop: 10,
+    },
+    activityAction: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+    },
+    activityActionText: {
+        fontSize: 12,
+        color: '#64748b',
+        fontWeight: '500',
+    },
+    activityRe: {
+        fontSize: 12,
+        fontWeight: '700',
+        color: '#334155',
+        marginBottom: 2,
+    },
+    reportInput: {
+        backgroundColor: '#f9fafb',
+        borderWidth: 1,
+        borderColor: '#e5e7eb',
+        borderRadius: 10,
+        padding: 12,
+        height: 100,
+        textAlignVertical: 'top',
+        marginBottom: 20,
+        fontSize: 14,
+        color: '#111827',
     },
     activityHeaderRow: {
         flexDirection: 'row',

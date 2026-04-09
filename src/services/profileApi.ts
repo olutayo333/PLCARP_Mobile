@@ -75,6 +75,24 @@ export interface ExpertsQuery {
     specialty?: string;
 }
 
+export interface UserProfile {
+    id: string;
+    fullName: string;
+    email: string;
+    role: string;
+    phoneNumber?: string;
+    avatarUrl?: string;
+    pointsCount: number;
+    likesReceived: number;
+    createdAt: string;
+    expertProfile?: any;
+    organization?: any;
+    metrics?: {
+        likesReceived: number;
+        pointsCount: number;
+    };
+}
+
 // ─── Profile API Slice ────────────────────────────────────────────────────────
 
 export const profileApiSlice = apiSlice.injectEndpoints({
@@ -86,12 +104,12 @@ export const profileApiSlice = apiSlice.injectEndpoints({
          *  Get the current authenticated user's profile (includes org or expertProfile).
          *  Used by: expert/profile, ngo/profile
          */
-        getUserProfile: builder.query<any, void>({
+        getUserProfile: builder.query<UserProfile, void>({
             query: () => ({
                 url: `/users/profile`,
                 method: REQUEST_METHODS.GET,
             }),
-            transformResponse: (response: HttpSuccessResponse<any>) => response?.data,
+            transformResponse: (response: HttpSuccessResponse<UserProfile>) => response?.data,
             providesTags: ['UserProfile'],
         }),
 

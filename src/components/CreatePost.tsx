@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, FlatList, Platform, Modal, KeyboardAvoidingView, Image } from 'react-native';
+import { useRoute, RouteProp } from '@react-navigation/native';
+import { RootStackParamList } from '../navigation/types';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { X, ChevronDown } from 'lucide-react-native';
 import { useGetCommunitiesQuery, useCreateCommunityTopicMutation, useSearchCommunityMembersQuery, CommunitySearchResult } from '../services/communityApi';
@@ -10,6 +12,9 @@ interface CreatePostProps {
 }
 
 export function CreatePost({ onCancel, onSuccess }: CreatePostProps) {
+  const route = useRoute<RouteProp<RootStackParamList, 'CreatePost'>>();
+  const initialCommunityId = route.params?.communityId;
+
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [selectedCommunity, setSelectedCommunity] = useState<CommunitySearchResult | null>(null);
@@ -30,6 +35,17 @@ export function CreatePost({ onCancel, onSuccess }: CreatePostProps) {
   }, [mentionQuery]);
 
   const { data: communitiesData, isLoading: loadingCommunities } = useGetCommunitiesQuery({});
+
+  // Effect to handle pre-selection of community
+  useEffect(() => {
+    if (initialCommunityId && communitiesData?.communities) {
+      const comm = communitiesData.communities.find(c => c.id === initialCommunityId);
+      if (comm) {
+        setSelectedCommunity(comm);
+      }
+    }
+  }, [initialCommunityId, communitiesData]);
+
   const [createTopic] = useCreateCommunityTopicMutation();
 
   const { data: memberResults } = useSearchCommunityMembersQuery(
@@ -137,7 +153,7 @@ export function CreatePost({ onCancel, onSuccess }: CreatePostProps) {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <View style={{ flex: 1, paddingTop: insets.top }}>
+      <View style={{ flex: 1, paddingTop: insets.top, paddingBottom: insets.bottom }}>
         <View style={styles.header}>
           <TouchableOpacity onPress={onCancel}>
             <X size={24} color="#374151" />
@@ -150,13 +166,14 @@ export function CreatePost({ onCancel, onSuccess }: CreatePostProps) {
           <View style={styles.formCard}>
             <Text style={styles.label}>Community</Text>
             <TouchableOpacity
-              style={styles.communitySelector}
-              onPress={() => setShowCommunityPicker(true)}
+              style={[styles.communitySelector, !!initialCommunityId && styles.communitySelectorDisabled]}
+              onPress={() => !initialCommunityId && setShowCommunityPicker(true)}
+              disabled={!!initialCommunityId}
             >
               <Text style={[styles.communitySelectorText, !selectedCommunity && { color: '#9ca3af' }]}>
                 {selectedCommunity ? selectedCommunity.name : 'Select a community'}
               </Text>
-              <ChevronDown size={20} color="#6b7280" />
+              {!initialCommunityId && <ChevronDown size={20} color="#6b7280" />}
             </TouchableOpacity>
 
             <Text style={styles.label}>Title</Text>
@@ -166,6 +183,7 @@ export function CreatePost({ onCancel, onSuccess }: CreatePostProps) {
               placeholderTextColor="#9ca3af"
               value={title}
               onChangeText={setTitle}
+              maxLength={50}
             />
 
             <Text style={styles.label}>Discussion Content</Text>
@@ -306,12 +324,16 @@ const styles = StyleSheet.create({
     color: '#1e293b',
     fontWeight: '500',
   },
+  communitySelectorDisabled: {
+    backgroundColor: '#f1f5f9',
+    borderColor: '#e2e8f0',
+  },
   titleInput: {
     fontSize: 16,
     color: '#1e293b',
     padding: 14,
-    borderWidth: 1.5,
-    borderColor: '#0e7490',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
     borderRadius: 12,
     backgroundColor: '#fff',
     ...Platform.select({
@@ -330,7 +352,7 @@ const styles = StyleSheet.create({
     minHeight: 180,
     textAlignVertical: 'top',
     padding: 14,
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: '#e2e8f0',
     borderRadius: 12,
     backgroundColor: '#fff',

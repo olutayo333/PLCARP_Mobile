@@ -8,6 +8,7 @@ import { ExpertDetailScreen } from '../screens/ExpertDetailScreen';
 import { CreatePost } from '../components/CreatePost';
 import { RootStackParamList } from './types';
 import { LoginScreen } from '../screens/LoginScreen';
+import { CommunityDetailScreen } from '../screens/CommunityDetailScreen';
 import { RegisterScreen } from '../screens/RegisterScreen';
 import { GuestRegistrationScreen } from '../screens/GuestRegistrationScreen';
 import { ExpertRegistrationScreen } from '../screens/ExpertRegistrationScreen';
@@ -28,6 +29,11 @@ export function RootNavigator() {
                 <Stack.Screen
                     name="TopicDetail"
                     component={TopicDetailScreenWrapper}
+                    options={{ headerShown: false }}
+                />
+                <Stack.Screen
+                    name="CommunityDetail"
+                    component={CommunityDetailScreenWrapper}
                     options={{ headerShown: false }}
                 />
                 <Stack.Screen
@@ -111,12 +117,24 @@ export function RootNavigator() {
     );
 }
 
+function CommunityDetailScreenWrapper({ route, navigation }: any) {
+    const { communityId } = route.params;
+    return (
+        <CommunityDetailScreen
+            route={route}
+            navigation={navigation}
+        />
+    );
+}
+
 function TopicDetailScreenWrapper({ route, navigation }: any) {
-    const { communityId, topicId } = route.params;
+    const { communityId, topicId, quoteCommentId, replyCommentId } = route.params;
     return (
         <TopicDetailScreen
             communityId={communityId}
             topicId={topicId}
+            quoteCommentId={quoteCommentId}
+            replyCommentId={replyCommentId}
             onBack={() => navigation.goBack()}
         />
     );

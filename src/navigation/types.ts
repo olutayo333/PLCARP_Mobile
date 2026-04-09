@@ -1,8 +1,8 @@
 export type RootStackParamList = {
     MainTabs: undefined;
-    TopicDetail: { communityId: string; topicId: string };
+    TopicDetail: { communityId: string; topicId: string; initialQuoteId?: string; quoteCommentId?: string; replyCommentId?: string };
     ExpertDetail: { expertId: string };
-    CreatePost: undefined;
+    CreatePost: { communityId?: string } | undefined;
     Login: undefined;
     Register: undefined;
     GuestRegistration: undefined;
@@ -10,6 +10,7 @@ export type RootStackParamList = {
     NGORegistration: undefined;
     RegistrationComplete: undefined;
     ForgotPassword: undefined;
+    CommunityDetail: { communityId: string };
 };
 
 export type MainTabParamList = {

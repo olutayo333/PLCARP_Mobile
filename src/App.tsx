@@ -8,6 +8,7 @@ import { setUser } from './store/slices/userSlice';
 import { RootState } from './store';
 import { GlobalToast } from './components/GlobalToast';
 import { GlobalAlert } from './components/GlobalAlert';
+import { socketService } from './services/socketService';
 
 // ── Lazy-load all heavy modules so a bad import doesn't crash the JS thread ──
 const RootNavigator = React.lazy(() =>
@@ -77,6 +78,7 @@ function AppContent() {
         const onboarded = await AsyncStorage.getItem('onboarded');
         if (token && userJson) {
           dispatch(setUser(JSON.parse(userJson)));
+          socketService.connect(token);
         }
         setShowOnboarding(!token && !onboarded);
       } catch (e) {

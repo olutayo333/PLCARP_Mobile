@@ -3,7 +3,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Home, Users, Search, Bell, User } from 'lucide-react-native';
 
 import { FeedScreen } from '../screens/FeedScreen';
-import { CommunitiesScreen } from '../screens/CommunitiesScreen';
+import { CommunitiesNavigator } from './CommunitiesNavigator';
 import { SearchScreen } from '../screens/SearchScreen';
 import { NotificationScreen } from '../screens/NotificationScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
@@ -53,7 +53,7 @@ export function MainTabNavigator() {
             </Tab.Screen>
             <Tab.Screen
                 name="CommunitiesStack"
-                component={CommunitiesScreen}
+                component={CommunitiesNavigator}
                 options={{
                     title: 'Communities',
                     tabBarIcon: ({ color, size }) => <Users size={size} color={color} />,

@@ -55,38 +55,23 @@ export const notificationApi = apiSlice.injectEndpoints({
       PaginatedNotifications,
       { isRead?: boolean; type?: NotificationType; page?: number; limit?: number }
     >({
-      query: (params) => ({
-        url: '/notifications',
-        params,
-      }),
-      // Refactor cache to merge paginated results for the same filter
-      serializeQueryArgs: ({ endpointName, queryArgs }) => {
-        // Keep the cache key unique to the filters (isRead, type) but NOT the page
-        const { isRead, type } = queryArgs;
-        return `${endpointName}-${isRead || 'all'}-${type || 'all'}`;
-      },
-      merge: (currentCache, newItems) => {
-        if (newItems.page === 1) {
-          // If first page, replace cache (e.g. on refresh)
-          return newItems;
-        }
-        // Append new notifications to existing ones
+      query: (params) => {
+        console.log('[NotificationAPI] getNotifications Params:', params);
         return {
-          ...newItems,
-          notifications: [...currentCache.notifications, ...newItems.notifications],
+          url: '/notifications',
+          params,
         };
       },
-      // Force individual pages to update when invalidated
-      forceRefetch({ currentArg, previousArg }) {
-        return currentArg !== previousArg;
+      transformResponse: (response: { data: PaginatedNotifications }) => {
+        console.log('[NotificationAPI] getNotifications Response:', response.data);
+        return response.data;
       },
-      transformResponse: (response: { data: PaginatedNotifications }) => response.data,
       providesTags: (result) =>
         result?.notifications
           ? [
-              ...result.notifications.map(({ id }) => ({ type: 'Notifications' as const, id })),
-              { type: 'Notifications', id: 'LIST' },
-            ]
+            ...result.notifications.map(({ id }) => ({ type: 'Notifications' as const, id })),
+            { type: 'Notifications', id: 'LIST' },
+          ]
           : [{ type: 'Notifications', id: 'LIST' }],
     }),
 

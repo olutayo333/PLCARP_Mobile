@@ -18,6 +18,20 @@ import {
     Send,
     Trash2,
     X,
+    Quote,
+    Reply,
+    AlertCircle,
+    ChevronUp,
+    ChevronDown,
+    Edit2,
+    Undo2,
+    Redo2,
+    Bold,
+    Italic,
+    Underline,
+    Strikethrough,
+    ListOrdered,
+    List,
 } from 'lucide-react-native';
 import {
     useGetTopicByIdQuery,
@@ -26,20 +40,26 @@ import {
     useToggleTopicLikeMutation,
     useToggleCommentLikeMutation,
     useReportTopicMutation,
+    useReportCommentMutation,
     useDeleteTopicMutation,
+    useDeleteCommentMutation,
+    useUpdateCommentMutation,
     useSearchCommunityMembersQuery,
 } from '../services/communityApi';
 import { useDispatch, useSelector } from 'react-redux';
 import { showToast } from '../store/slices/uiSlice';
 import { Skeleton } from '../components/common/Skeleton';
+import { ReportModal } from '../components/ReportModal';
 
 interface TopicDetailScreenProps {
     communityId: string;
     topicId: string;
+    quoteCommentId?: string;
+    replyCommentId?: string;
     onBack: () => void;
 }
 
-export function TopicDetailScreen({ communityId, topicId, onBack }: TopicDetailScreenProps) {
+export function TopicDetailScreen({ communityId, topicId, quoteCommentId, replyCommentId, onBack }: TopicDetailScreenProps) {
     const dispatch = useDispatch();
     const { height: screenHeight } = useWindowDimensions();
     const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
@@ -49,11 +69,14 @@ export function TopicDetailScreen({ communityId, topicId, onBack }: TopicDetailS
     const { data: topic, isLoading } = useGetTopicByIdQuery({ communityId, topicId });
     const { data: mentions } = useGetMentionsQuery(undefined, { skip: !isLoggedIn });
 
-    const [addComment] = useAddCommentMutation();
+    const [addComment, { isLoading: isPosting }] = useAddCommentMutation();
     const [toggleLike] = useToggleTopicLikeMutation();
     const [toggleCommentLike] = useToggleCommentLikeMutation();
     const [deleteTopic] = useDeleteTopicMutation();
     const [reportTopic] = useReportTopicMutation();
+    const [reportComment] = useReportCommentMutation();
+    const [deleteComment] = useDeleteCommentMutation();
+    const [updateComment] = useUpdateCommentMutation();
     const [commentText, setCommentText] = useState('');
     const [isLiked, setIsLiked] = useState(false);
     const [likes, setLikes] = useState(0);
@@ -64,10 +87,25 @@ export function TopicDetailScreen({ communityId, topicId, onBack }: TopicDetailS
     const [debouncedMentionQuery, setDebouncedMentionQuery] = useState('');
     const [mentionedUsers, setMentionedUsers] = useState<{ id: string; fullName: string }[]>([]);
 
-    // Report States
     const [isReportModalVisible, setIsReportModalVisible] = useState(false);
     const [reportReason, setReportReason] = useState('');
     const [isReporting, setIsReporting] = useState(false);
+    const [isCommentModalVisible, setIsCommentModalVisible] = useState(false);
+    const [reportingCommentId, setReportingCommentId] = useState<string | null>(null);
+
+    // Edit Comment States
+    const [isEditModalVisible, setIsEditModalVisible] = useState(false);
+    const [editingComment, setEditingComment] = useState<any | null>(null);
+    const [editCommentText, setEditCommentText] = useState('');
+    const [isUpdatingComment, setIsUpdatingComment] = useState(false);
+    const [processedIntentId, setProcessedIntentId] = useState<string | null>(null);
+
+    // Threading & Quotes
+    const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set());
+    const [unfoldedThreads, setUnfoldedThreads] = useState<Set<string>>(new Set());
+    const [quotedComment, setQuotedComment] = useState<any | null>(null);
+    const [replyToComment, setReplyToComment] = useState<any | null>(null);
+    const scrollViewRef = React.useRef<ScrollView>(null);
 
     useEffect(() => {
         const timer = setTimeout(() => {
@@ -95,8 +133,65 @@ export function TopicDetailScreen({ communityId, topicId, onBack }: TopicDetailS
         if (topic) {
             setIsLiked(topic.hasLiked || false);
             setLikes(topic.likeCount || 0);
+
+            // Handle navigation intent (Quote/Reply from Activities feed)
+            const intentId = quoteCommentId || replyCommentId;
+            if (intentId && processedIntentId !== intentId) {
+                const findCommentRecursive = (comments: any[], target: string): any | null => {
+                    for (const c of comments) {
+                        if (c.id === target) return c;
+                        if (c.replies && c.replies.length > 0) {
+                            const found = findCommentRecursive(c.replies, target);
+                            if (found) return found;
+                        }
+                    }
+                    return null;
+                };
+
+                const comment = findCommentRecursive(topic.comments || [], intentId);
+                if (comment) {
+                    if (quoteCommentId) {
+                        setQuotedComment(comment);
+                        setReplyToComment(null);
+                    } else {
+                        setReplyToComment(comment);
+                        setQuotedComment(null);
+                    }
+                    setIsCommentModalVisible(true);
+                    setProcessedIntentId(intentId);
+                }
+            }
         }
-    }, [topic]);
+    }, [topic, quoteCommentId, replyCommentId, processedIntentId]);
+
+    // Reset intent when IDs change or on unmount
+    useEffect(() => {
+        return () => setProcessedIntentId(null);
+    }, [quoteCommentId, replyCommentId]);
+
+    const toggleReplies = (commentId: string) => {
+        setExpandedComments(prev => {
+            const next = new Set(prev);
+            if (next.has(commentId)) {
+                next.delete(commentId);
+            } else {
+                next.add(commentId);
+            }
+            return next;
+        });
+    };
+
+    const toggleThread = (commentId: string) => {
+        setUnfoldedThreads(prev => {
+            const next = new Set(prev);
+            if (next.has(commentId)) {
+                next.delete(commentId);
+            } else {
+                next.add(commentId);
+            }
+            return next;
+        });
+    };
 
     const handleGuestAction = (action: string) => {
         Alert.alert(
@@ -115,9 +210,9 @@ export function TopicDetailScreen({ communityId, topicId, onBack }: TopicDetailS
     const handlePostComment = async () => {
         if (!isLoggedIn) {
             handleGuestAction('post a comment');
-            return;
+            return false;
         }
-        if (!commentText.trim()) return;
+        if (!commentText.trim()) return false;
 
         try {
             const response = await addComment({
@@ -125,20 +220,27 @@ export function TopicDetailScreen({ communityId, topicId, onBack }: TopicDetailS
                 topicId,
                 data: {
                     body: commentText,
-                    mentionedUserIds: mentionedUsers.length > 0 ? mentionedUsers.map(u => u.id) : undefined
+                    mentionedUserIds: mentionedUsers.length > 0 ? mentionedUsers.map(u => u.id) : undefined,
+                    parentId: replyToComment?.id,
+                    quoteId: quotedComment?.id
                 }
             }).unwrap();
+
             if (response?.status) {
                 setCommentText('');
                 setMentionedUsers([]);
+                setReplyToComment(null);
+                setQuotedComment(null);
                 Alert.alert('Success', response?.message || 'Comment posted');
-            }
-            else {
+                return true;
+            } else {
                 Alert.alert('Error', response?.message || 'Failed to post comment');
+                return false;
             }
         } catch (error: any) {
             const serverError = error?.data?.message || 'Failed to post comment';
             Alert.alert('Error', serverError);
+            return false;
         }
     };
 
@@ -192,36 +294,102 @@ export function TopicDetailScreen({ communityId, topicId, onBack }: TopicDetailS
         }
     };
 
-    const handleReport = () => {
+    const handleReport = (commentId?: string) => {
         if (!isLoggedIn) {
             handleGuestAction('report');
             return;
         }
-        setReportReason('');
+        // Instead of triggering immediately, we just show the modal and set target
+        setReportingCommentId(commentId || null);
         setIsReportModalVisible(true);
     };
 
-    const submitReport = async () => {
-        if (!reportReason.trim()) {
-            Alert.alert('Error', 'Please enter a reason for reporting');
-            return;
-        }
+    const submitReport = async (reason: string) => {
         setIsReporting(true);
         try {
-            const response = await reportTopic({ communityId, topicId, data: { reason: reportReason.trim() } }).unwrap();
-            setIsReportModalVisible(false);
-            if (response?.status) {
-                //Alert.alert('Success', response.message || 'Topic reported successfully');
-                dispatch(showToast({ message: response?.message || 'Topic reported successfully', type: 'success' }));
-
+            let response;
+            if (reportingCommentId) {
+                response = await reportComment({
+                    communityId,
+                    topicId,
+                    commentId: reportingCommentId,
+                    data: { reason }
+                }).unwrap();
             } else {
-                Alert.alert('Error', response?.message || 'Failed to report topic');
+                response = await reportTopic({ communityId, topicId, data: { reason } }).unwrap();
+            }
+
+            setIsReportModalVisible(false);
+            setReportingCommentId(null);
+
+            if (response?.status) {
+                dispatch(showToast({ message: response?.message || 'Reported successfully', type: 'success' }));
+            } else {
+                Alert.alert('Error', response?.message || 'Failed to submit report');
             }
         } catch (error: any) {
-            const serverError = error?.data?.message || 'Failed to report topic';
+            const serverError = error?.data?.message || 'Failed to submit report';
             Alert.alert('Error', serverError);
         } finally {
             setIsReporting(false);
+        }
+    };
+
+    const handleDeleteComment = (commentId: string) => {
+        Alert.alert(
+            'Delete Comment',
+            'Are you sure you want to delete this comment?',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Delete',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            const response: any = await deleteComment({ communityId, topicId, commentId }).unwrap();
+                            if (response?.status) {
+                                dispatch(showToast({ message: 'Comment deleted', type: 'success' }));
+                            } else {
+                                Alert.alert('Error', response?.message || 'Failed to delete comment');
+                            }
+                        } catch (error: any) {
+                            Alert.alert('Error', error?.data?.message || 'Failed to delete comment');
+                        }
+                    }
+                }
+            ]
+        );
+    };
+
+    const handleEditComment = (comment: any) => {
+        setEditingComment(comment);
+        setEditCommentText(decodeHtmlEntities(comment.body));
+        setIsEditModalVisible(true);
+    };
+
+    const submitEditComment = async () => {
+        if (!editCommentText.trim()) return;
+        setIsUpdatingComment(true);
+        try {
+            const response: any = await updateComment({
+                communityId,
+                topicId,
+                commentId: editingComment.id,
+                data: { body: editCommentText.trim() }
+            }).unwrap();
+
+            if (response?.status) {
+                setIsEditModalVisible(false);
+                setEditingComment(null);
+                setEditCommentText('');
+                dispatch(showToast({ message: 'Comment updated', type: 'success' }));
+            } else {
+                Alert.alert('Error', response?.message || 'Failed to update comment');
+            }
+        } catch (error: any) {
+            Alert.alert('Error', error?.data?.message || 'Failed to update comment');
+        } finally {
+            setIsUpdatingComment(false);
         }
     };
 
@@ -260,7 +428,7 @@ export function TopicDetailScreen({ communityId, topicId, onBack }: TopicDetailS
                     style: 'destructive',
                     onPress: async () => {
                         try {
-                            const response = await deleteTopic({ communityId, topicId }).unwrap();
+                            const response: any = await deleteTopic({ communityId, topicId }).unwrap();
                             if (response?.status) {
                                 onBack(); // Navigate back on success
                             } else {
@@ -320,6 +488,165 @@ export function TopicDetailScreen({ communityId, topicId, onBack }: TopicDetailS
             </ScrollView>
         </View>
     );
+    const decodeHtmlEntities = (text: string) => {
+        if (!text) return '';
+        return text
+            .replace(/&amp;/g, '&')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&quot;/g, '"')
+            .replace(/&#39;/g, "'")
+            .replace(/&nbsp;/g, ' ');
+    };
+
+    const renderComment = (comment: any, depth = 0, parent: any = null) => {
+        const isMentioned = user && (
+            comment.mentionedUserId === user.id ||
+            comment.mentionedUserIds?.includes(user.id) ||
+            comment.body.toLowerCase().includes(`@${user?.fullName?.toLowerCase()}`) ||
+            mentions?.some((m: any) => m.commentId === comment.id)
+        );
+
+        return (
+            <View key={comment.id} style={{ marginLeft: depth > 0 ? 16 : 0, marginTop: depth > 0 ? 8 : 0, marginBottom: depth === 0 ? 24 : 0 }}>
+                <View style={[styles.commentCard, isMentioned && styles.commentMentioned, depth > 0 && styles.replyCard]}>
+                    <View style={styles.commentAuthorRow}>
+                        <View style={styles.avatarTiny}>
+                            {comment.author.avatarUrl ? (
+                                <Image source={{ uri: comment.author.avatarUrl }} style={styles.avatarImageTiny} />
+                            ) : (
+                                <Text style={styles.avatarTextTiny}>{comment.author.fullName.charAt(0)}</Text>
+                            )}
+                        </View>
+                        <View style={{ flex: 1 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                <Text style={styles.commentAuthor} numberOfLines={1} ellipsizeMode="tail">{comment.author.fullName}</Text>
+                                <Text style={styles.commentDate}>{new Date(comment.createdAt).toLocaleDateString()}</Text>
+                                {isMentioned && (
+                                    <View style={styles.mentionBadge}>
+                                        <Text style={styles.mentionBadgeText}>MENTIONED</Text>
+                                    </View>
+                                )}
+                                {user?.id === comment.author.id && (
+                                    <View style={styles.authorActions}>
+                                        <TouchableOpacity onPress={() => handleEditComment(comment)}>
+                                            <Text style={styles.authorActionText}>EDIT</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity onPress={() => handleDeleteComment(comment.id)}>
+                                            <Text style={[styles.authorActionText, { color: '#ef4444' }]}>DELETE</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                )}
+                            </View>
+                        </View>
+                    </View>
+
+                    {isMentioned && user && (
+                        <View style={styles.mentionAtPill}>
+                            <Text style={styles.mentionAtPillText}>@{user.fullName}</Text>
+                        </View>
+                    )}
+
+                    {comment.quote ? (
+                        <View style={styles.quotedCommentBox}>
+                            <Text style={styles.quotedCommentAuthor}>Quoting @{comment.quote.author.fullName}</Text>
+                            <Text style={styles.quotedCommentBody} numberOfLines={2}>
+                                {decodeHtmlEntities(comment.quote.body)}
+                            </Text>
+                        </View>
+                    ) : (parent && (
+                        <View style={styles.quotedCommentBox}>
+                            <Text style={styles.quotedCommentAuthor}>Reply to @{parent.author.fullName}</Text>
+                            <Text style={styles.quotedCommentBody} numberOfLines={2}>
+                                {decodeHtmlEntities(parent.body)}
+                            </Text>
+                        </View>
+                    ))}
+
+                    <Text style={[styles.commentBody, depth > 0 && styles.replyBody]}>
+                        {renderRichText(decodeHtmlEntities(comment.body))}
+                    </Text>
+
+                    {isLoggedIn ? (
+                        <View style={styles.commentActions}>
+                            <TouchableOpacity style={styles.commentAction} onPress={() => handleLikeComment(comment.id)}>
+                                <Heart size={14} color={comment.hasLiked ? "#ef4444" : "#6b7280"} fill={comment.hasLiked ? "#ef4444" : "transparent"} />
+                                <Text style={[styles.commentActionText, comment.hasLiked && { color: '#ef4444' }]}>
+                                    {comment.likeCount}
+                                </Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={styles.commentAction}
+                                onPress={() => {
+                                    setReplyToComment(comment);
+                                    setQuotedComment(null);
+                                    setIsCommentModalVisible(true);
+                                }}
+                            >
+                                <Reply size={14} color="#6b7280" />
+                                <Text style={styles.commentActionText}>Reply</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={styles.commentAction}
+                                onPress={() => {
+                                    setQuotedComment(comment);
+                                    setReplyToComment(null);
+                                    setIsCommentModalVisible(true);
+                                }}
+                            >
+                                <Quote size={14} color="#6b7280" />
+                                <Text style={styles.commentActionText}>Quote</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={styles.commentAction}
+                                onPress={() => handleReport(comment.id)}
+                            >
+                                <Flag size={14} color="#6b7280" />
+                                <Text style={styles.commentActionText}>Report</Text>
+                            </TouchableOpacity>
+                        </View>
+                    ) : (
+                        <Text style={styles.commentLikeCountGuest}>{comment.likeCount > 0 ? `♡ ${comment.likeCount}` : ''}</Text>
+                    )}
+                </View>
+
+                {comment.replies && comment.replies.length > 0 && (
+                    <View style={styles.repliesWrapper}>
+                        {!unfoldedThreads.has(comment.id) ? (
+                            <TouchableOpacity style={styles.showMoreButton} onPress={() => toggleThread(comment.id)}>
+                                <MessageCircle size={14} color="#0e7490" />
+                                <Text style={styles.showMoreText}>Show {comment.replies.length} replies</Text>
+                                <ChevronDown size={14} color="#0e7490" style={{ marginLeft: 4 }} />
+                            </TouchableOpacity>
+                        ) : (
+                            <>
+                                <TouchableOpacity style={[styles.showMoreButton, { marginBottom: 12 }]} onPress={() => toggleThread(comment.id)}>
+                                    <ChevronUp size={14} color="#6b7280" />
+                                    <Text style={[styles.showMoreText, { color: '#6b7280' }]}>Fold replies</Text>
+                                </TouchableOpacity>
+                                {(expandedComments.has(comment.id) ? comment.replies : comment.replies.slice(0, 5)).map((reply: any) =>
+                                    renderComment(reply, depth + 1, comment)
+                                )}
+                                {comment.replies.length > 5 && !expandedComments.has(comment.id) && (
+                                    <TouchableOpacity style={styles.showMoreButton} onPress={() => toggleReplies(comment.id)}>
+                                        <MessageCircle size={14} color="#0e7490" />
+                                        <Text style={styles.showMoreText}>Show {comment.replies.length - 5} more</Text>
+                                        <ChevronDown size={14} color="#0e7490" style={{ marginLeft: 4 }} />
+                                    </TouchableOpacity>
+                                )}
+                                {expandedComments.has(comment.id) && (
+                                    <TouchableOpacity style={styles.showMoreButton} onPress={() => toggleReplies(comment.id)}>
+                                        <ChevronUp size={14} color="#6b7280" />
+                                        <Text style={[styles.showMoreText, { color: '#6b7280' }]}>Show less</Text>
+                                    </TouchableOpacity>
+                                )}
+                            </>
+                        )}
+                    </View>
+                )}
+            </View>
+        );
+    };
     const renderRichText = (text: string) => {
         if (!text) return null;
         // Simple regex to match @Name patterns. 
@@ -338,50 +665,142 @@ export function TopicDetailScreen({ communityId, topicId, onBack }: TopicDetailS
         );
     };
     const renderReportModal = () => (
-        <Modal
+        <ReportModal
             visible={isReportModalVisible}
-            transparent={true}
+            onClose={() => setIsReportModalVisible(false)}
+            onSubmit={submitReport}
+            isSubmitting={isReporting}
+        />
+    );
+
+    const renderEditModal = () => (
+        <Modal
+            visible={isEditModalVisible}
+            transparent
             animationType="fade"
-            onRequestClose={() => setIsReportModalVisible(false)}
+            onRequestClose={() => setIsEditModalVisible(false)}
         >
             <View style={styles.modalOverlay}>
                 <View style={styles.modalContent}>
                     <View style={styles.modalHeader}>
-                        <Text style={styles.modalTitle}>Report Topic</Text>
-                        <TouchableOpacity onPress={() => setIsReportModalVisible(false)}>
-                            <X size={24} color="#374151" />
+                        <Text style={styles.modalTitle}>Edit Comment</Text>
+                        <TouchableOpacity onPress={() => setIsEditModalVisible(false)}>
+                            <X size={24} color="#6b7280" />
                         </TouchableOpacity>
                     </View>
                     <View style={styles.modalBody}>
-                        <Text style={styles.modalSubTitle}>Reason for reporting</Text>
                         <TextInput
                             style={styles.reportInput}
-                            placeholder="Tell us why you're reporting this topic..."
-                            value={reportReason}
-                            onChangeText={setReportReason}
+                            value={editCommentText}
+                            onChangeText={setEditCommentText}
                             multiline
-                            numberOfLines={4}
-                            autoFocus
+                            placeholder="Edit your comment..."
                         />
                         <View style={styles.modalActions}>
                             <TouchableOpacity
                                 style={styles.cancelBtn}
-                                onPress={() => setIsReportModalVisible(false)}
-                                disabled={isReporting}
+                                onPress={() => setIsEditModalVisible(false)}
+                                disabled={isUpdatingComment}
                             >
                                 <Text style={styles.cancelBtnText}>Cancel</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
-                                style={[styles.reportSubmitBtn, isReporting && { opacity: 0.7 }]}
-                                onPress={submitReport}
-                                disabled={isReporting}
+                                style={[styles.reportSubmitBtn, { backgroundColor: '#0e7490' }]}
+                                onPress={submitEditComment}
+                                disabled={isUpdatingComment || !editCommentText.trim()}
                             >
-                                {isReporting ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.reportSubmitBtnText}>Report</Text>}
+                                {isUpdatingComment ? (
+                                    <ActivityIndicator color="#fff" size="small" />
+                                ) : (
+                                    <Text style={styles.reportSubmitBtnText}>Save Changes</Text>
+                                )}
                             </TouchableOpacity>
                         </View>
                     </View>
                 </View>
             </View>
+        </Modal>
+    );
+
+    const renderCommentModal = () => (
+        <Modal
+            visible={isCommentModalVisible}
+            transparent
+            animationType="slide"
+            onRequestClose={() => setIsCommentModalVisible(false)}
+        >
+            <KeyboardAvoidingView
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                style={styles.inputModalOverlay}
+            >
+                <View style={styles.inputModalContent}>
+                    <View style={styles.inputHandle} />
+
+                    <View style={styles.inputModalHeader}>
+                        {(replyToComment || quotedComment) ? (
+                            <TouchableOpacity
+                                style={styles.clearQuoteBtn}
+                                onPress={() => {
+                                    setReplyToComment(null);
+                                    setQuotedComment(null);
+                                }}
+                            >
+                                <X size={14} color="#ef4444" />
+                                <Text style={styles.clearQuoteText}>Clear quote</Text>
+                            </TouchableOpacity>
+                        ) : <View />}
+                    </View>
+
+                    <View style={styles.inputToolbar}>
+                        <Undo2 size={20} color="#64748b" />
+                        <Redo2 size={20} color="#64748b" />
+                        <View style={styles.toolbarDivider} />
+                        <Bold size={20} color="#1e293b" />
+                        <Italic size={20} color="#64748b" />
+                        <Underline size={20} color="#64748b" />
+                        <Strikethrough size={20} color="#64748b" />
+                        <View style={styles.toolbarDivider} />
+                        <ListOrdered size={20} color="#64748b" />
+                        <List size={20} color="#64748b" />
+                    </View>
+
+                    <View style={styles.inputMainBox}>
+                        {(replyToComment || quotedComment) && (
+                            <View style={styles.inputQuoteBox}>
+                                <Text style={styles.inputQuoteAuthor}>
+                                    {replyToComment ? replyToComment.author.fullName : quotedComment?.author.fullName}
+                                </Text>
+                                <Text style={styles.inputQuoteBody} numberOfLines={2}>
+                                    {decodeHtmlEntities(replyToComment ? replyToComment.body : quotedComment?.body || '')}
+                                </Text>
+                            </View>
+                        )}
+                        <TextInput
+                            style={styles.modalTextInput}
+                            placeholder="Type here..."
+                            value={commentText}
+                            onChangeText={handleInputChange}
+                            multiline
+                            autoFocus
+                        />
+                    </View>
+
+                    <Text style={styles.inputGuidelines}>
+                        Be constructive · PLRCAP Community Guidelines apply
+                    </Text>
+
+                    <TouchableOpacity
+                        style={styles.inputSubmitBtn}
+                        onPress={async () => {
+                            const success = await handlePostComment();
+                            if (success) setIsCommentModalVisible(false);
+                        }}
+                        disabled={isPosting}
+                    >
+                        {isPosting ? <ActivityIndicator color="#fff" /> : <Text style={styles.inputSubmitBtnText}>Post reply</Text>}
+                    </TouchableOpacity>
+                </View>
+            </KeyboardAvoidingView>
         </Modal>
     );
 
@@ -391,6 +810,8 @@ export function TopicDetailScreen({ communityId, topicId, onBack }: TopicDetailS
     return (
         <View style={[styles.detailContainer, { paddingTop: Math.max(insets.top, Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 10 : 0) }]}>
             {renderReportModal()}
+            {renderEditModal()}
+            {renderCommentModal()}
             <View style={styles.detailHeader}>
                 <TouchableOpacity onPress={onBack}>
                     <ArrowLeft size={24} color="#374151" />
@@ -408,166 +829,98 @@ export function TopicDetailScreen({ communityId, topicId, onBack }: TopicDetailS
                 </View>
             </View>
 
-            <ScrollView
-                style={[styles.detailContent, { maxHeight: screenHeight - 130 }]}
-                showsVerticalScrollIndicator
-            >
-                <View style={styles.topicMain}>
-                    <View style={styles.topicMeta}>
-                        <Text style={styles.topicCategory}>Communications for Advocacy</Text>
-                        <Text style={styles.topicTitleLarge}>{topic.title}</Text>
-                        <View style={styles.authorRow}>
-                            <View style={styles.avatarSmall}>
-                                {topic.author.avatarUrl ? (
-                                    <Image
-                                        source={{ uri: topic.author.avatarUrl }}
-                                        style={styles.avatarImage}
-                                    />
-                                ) : (
-                                    <Text style={styles.avatarTextSmall}>{topic.author.fullName.charAt(0)}</Text>
-                                )}
-                            </View>
-                            <View style={{ marginLeft: 8 }}>
-                                <Text style={styles.authorNameDetail}>{topic.author.fullName}</Text>
-                                <Text style={styles.dateDetail}>{new Date(topic.createdAt).toLocaleDateString()} at {new Date(topic.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
-                            </View>
-                        </View>
-
-                        <View style={styles.topicStatsDetail}>
-                            <TouchableOpacity style={styles.statDetail} onPress={handleLike}>
-                                <Heart size={18} color={isLiked ? "#ef4444" : "#9ca3af"} fill={isLiked ? "#ef4444" : "transparent"} />
-                                <Text style={[styles.statDetailText, isLiked && { color: '#ef4444' }]}>{likes} likes</Text>
-                            </TouchableOpacity>
-                            <View style={styles.statDetail as any}>
-                                <MessageCircle size={18} color="#9ca3af" />
-                                <Text style={styles.statDetailText}>{topic.comments.length} replies</Text>
-                            </View>
-                            <TouchableOpacity style={styles.statDetail} onPress={handleReport}>
-                                <Flag size={18} color="#9ca3af" />
-                                <Text style={styles.statDetailText}>Report</Text>
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-
-                    <View style={styles.topicBodyContainer}>
-                        <Text style={styles.topicBodyText}>{renderRichText(topic.body)}</Text>
-                    </View>
-
-                </View>
-
-                <View style={styles.commentsSection}>
-                    <Text style={styles.commentsTitle}>Participation</Text>
-                    {topic.comments.map((comment) => {
-                        const isMentioned = user && (
-                            comment.mentionedUserId === user.id ||
-                            comment.mentionedUserIds?.includes(user.id) ||
-                            comment.body.toLowerCase().includes(`@${user?.fullName?.toLowerCase()}`) ||
-                            mentions?.some(m => m.commentId === comment.id)
-                        );
-
-                        return (
-                            <View key={comment.id} style={[styles.commentCard, isMentioned && styles.commentMentioned]}>
-                                <View style={styles.commentAuthorRow}>
-
-                                    <View style={styles.avatarTiny}>
-                                        {comment.author.avatarUrl ? (
-                                            <Image
-                                                source={{ uri: comment.author.avatarUrl }}
-                                                style={styles.avatarImageTiny}
-                                            />
-                                        ) : (
-                                            <Text style={styles.avatarTextTiny}>{comment.author.fullName.charAt(0)}</Text>
-                                        )}
-                                    </View>
-                                    <View style={{ flex: 1 }}>
-                                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <Text style={styles.commentAuthor}>{comment.author.fullName}</Text>
-                                            {isMentioned && (
-                                                <View style={styles.mentionBadge}>
-                                                    <Text style={styles.mentionBadgeText}>Mentioned</Text>
-                                                </View>
-                                            )}
-                                        </View>
-                                        <Text style={styles.commentDate}>{new Date(comment.createdAt).toLocaleDateString()}</Text>
-                                    </View>
-                                </View>
-                                <Text style={styles.commentBody}>{renderRichText(comment.body)}</Text>
-                                <View style={styles.commentActions}>
-
-                                    <TouchableOpacity
-                                        style={styles.commentAction}
-                                        onPress={() => handleLikeComment(comment.id)}
-                                    >
-                                        <Heart
-                                            size={14}
-                                            color={comment.hasLiked ? "#ef4444" : "#6b7280"}
-                                            fill={comment.hasLiked ? "#ef4444" : "transparent"}
-                                        />
-                                        <Text style={[styles.commentActionText, comment.hasLiked && { color: '#ef4444' }]}>
-                                            {comment.likeCount}
-                                        </Text>
-                                    </TouchableOpacity>
-                                </View>
-                            </View>
-                        );
-                    })}
-
-                </View>
-
-            </ScrollView>
-
             <KeyboardAvoidingView
-                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                style={{ flex: 1 }}
+                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
                 keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
             >
-                <View style={styles.commentInputWrapper}>
-                    {/* Mention suggestions dropdown */}
-                    {showMentions && filteredResults.length > 0 && (
-                        <View style={styles.mentionsOverlay}>
-                            {filteredResults.map((member) => (
-                                <TouchableOpacity
-                                    key={member.id}
-                                    style={styles.mentionItem}
-                                    onPress={() => handleSelectMention(member)}
-                                >
-                                    <View style={styles.mentionAvatar}>
-                                        <Text style={styles.mentionAvatarText}>{member.fullName.charAt(0)}</Text>
+                <ScrollView
+                    ref={scrollViewRef}
+                    style={styles.detailContent}
+                    contentContainerStyle={{ paddingBottom: 24 }}
+                    showsVerticalScrollIndicator
+                >
+                    <View style={styles.topicMain}>
+                        <View style={styles.topicMeta}>
+                            <Text style={styles.topicCategory}>Communications for Advocacy</Text>
+                            <Text style={styles.topicTitleLarge}>{topic.title}</Text>
+
+                            <View style={styles.authorRowMinimal}>
+                                <Text style={styles.authorNameHeader}>{topic.author.fullName}</Text>
+                                <Text style={styles.authorDateSeparator}>·</Text>
+                                <Text style={styles.authorDateHeader}>
+                                    {new Date(topic.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                </Text>
+                            </View>
+
+                            <View style={styles.headerBottomRow}>
+                                <View style={styles.statsGroup}>
+                                    <View style={styles.statItemMini}>
+                                        <MessageCircle size={14} color="#9ca3af" />
+                                        <Text style={styles.statTextMini}>{topic.comments.length} replies</Text>
                                     </View>
-                                    <Text style={styles.mentionName}>{member.fullName}</Text>
-                                </TouchableOpacity>
-                            ))}
-                        </View>
-                    )}
-                    {/* Mention chips strip */}
-                    {mentionedUsers.length > 0 && (
-                        <View style={styles.mentionChipsRow}>
-                            <Text style={styles.mentionChipsLabel}>Mentions:</Text>
-                            {mentionedUsers.map((user) => (
-                                <View key={user.id} style={styles.mentionChip}>
-                                    <Text style={styles.mentionChipText}>@{user.fullName}</Text>
-                                    <TouchableOpacity
-                                        onPress={() => handleRemoveMention(user.id)}
-                                        hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                                    >
-                                        <Text style={styles.mentionChipRemove}>✕</Text>
-                                    </TouchableOpacity>
+                                    <View style={styles.statItemMini}>
+                                        <Text style={styles.statTextMini}>👁 124 views</Text>
+                                    </View>
                                 </View>
-                            ))}
+
+                                <View style={styles.subscribedPill}>
+                                    <Text style={styles.checkIcon}>✓</Text>
+                                    <Text style={styles.subscribedText}>Subscribed</Text>
+                                </View>
+                            </View>
                         </View>
-                    )}
-                    <View style={styles.commentInputContainer}>
-                        <TextInput
-                            style={styles.commentInput}
-                            placeholder="Write a comment... (type @ to mention)"
-                            value={commentText}
-                            onChangeText={handleInputChange}
-                            multiline
-                        />
-                        <TouchableOpacity style={styles.sendButton} onPress={handlePostComment}>
-                            <Send size={20} color="#fff" />
+
+                        <View style={styles.topicBodyContainer}>
+                            <Text style={styles.topicBodyText}>{renderRichText(topic.body)}</Text>
+
+                            <View style={styles.parentActionsRow}>
+                                <TouchableOpacity style={styles.parentActionBtn} onPress={handleLike}>
+                                    <Heart size={16} color={isLiked ? "#ef4444" : "#64748b"} fill={isLiked ? "#ef4444" : "transparent"} />
+                                    <Text style={[styles.parentActionText, isLiked && { color: '#ef4444' }]}>
+                                        {likes > 0 ? `${likes} likes` : 'Like'}
+                                    </Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity style={styles.parentActionBtn} onPress={() => handleReport()}>
+                                    <Flag size={16} color="#64748b" />
+                                    <Text style={styles.parentActionText}>Report</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                    </View>
+
+                    <View style={styles.commentsSection}>
+
+                        {topic.comments
+                            .filter((c: any) => !c.parentId)
+                            .map((comment: any) => renderComment(comment))}
+                    </View>
+
+                </ScrollView>
+
+                {!isLoggedIn ? (
+                    <View style={styles.guestInputBanner}>
+                        <Text style={styles.guestInputText}>
+                            <Text style={styles.guestInputBold}>Join the conversation!</Text>
+                            {'  '}Login or register to like, reply, quote, and report comments.
+                        </Text>
+                        <TouchableOpacity
+                            style={styles.guestLoginBtn}
+                            onPress={() => navigation.navigate('Login')}
+                        >
+                            <Text style={styles.guestLoginBtnText}>Login / Register</Text>
                         </TouchableOpacity>
                     </View>
-                </View>
+                ) : (
+                    <TouchableOpacity
+                        style={styles.inputTriggerBar}
+                        onPress={() => setIsCommentModalVisible(true)}
+                    >
+                        <Text style={styles.inputTriggerText}>Type here...</Text>
+                        <Send size={20} color="#0e7490" />
+                    </TouchableOpacity>
+                )}
             </KeyboardAvoidingView>
         </View>
     );
@@ -582,7 +935,6 @@ const styles = StyleSheet.create({
     detailContainer: {
         flex: 1,
         backgroundColor: '#fff',
-        overflow: 'hidden',
     },
     detailHeader: {
         flexDirection: 'row',
@@ -668,7 +1020,12 @@ const styles = StyleSheet.create({
         fontSize: 12,
     },
     topicBodyContainer: {
-        paddingVertical: 20,
+        marginTop: 16,
+        padding: 16,
+        borderWidth: 2,
+        borderColor: '#374151',
+        borderRadius: 12,
+        backgroundColor: '#fff',
     },
     topicBodyText: {
         fontSize: 16,
@@ -728,9 +1085,9 @@ const styles = StyleSheet.create({
     },
     commentBody: {
         fontSize: 14,
-        color: '#374151',
+        color: '#4b5563',
         lineHeight: 20,
-        marginBottom: 12,
+        marginBottom: 8,
     },
     commentActions: {
         flexDirection: 'row',
@@ -744,19 +1101,28 @@ const styles = StyleSheet.create({
     commentActionText: {
         fontSize: 12,
         color: '#6b7280',
+        fontWeight: '500',
     },
     commentInputWrapper: {
-        backgroundColor: '#fff',
         borderTopWidth: 1,
-        borderTopColor: '#f3f4f6',
+        borderTopColor: '#e5e7eb',
+        paddingTop: 8,
+        paddingBottom: 16,
+        backgroundColor: '#fff',
+    },
+    commentInputContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        paddingHorizontal: 16,
     },
     mentionChipsRow: {
         flexDirection: 'row',
-        flexWrap: 'wrap',
-        paddingHorizontal: 16,
-        paddingTop: 8,
-        gap: 8,
         alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: 8,
+        paddingHorizontal: 16,
+        marginBottom: 8,
     },
     mentionChipsLabel: {
         fontSize: 12,
@@ -782,13 +1148,7 @@ const styles = StyleSheet.create({
         color: '#ef4444',
         fontWeight: 'bold',
     },
-    commentInputContainer: {
-        flexDirection: 'row',
-        padding: 16,
-        alignItems: 'center',
-        gap: 12,
-        backgroundColor: '#fff',
-    },
+
     mentionsOverlay: {
         backgroundColor: '#fff',
         borderTopWidth: 1,
@@ -845,24 +1205,37 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
     },
     mentionHighlight: {
-        color: '#4f46e5', // Brand indigo for highlight
-        fontWeight: '700',
+        color: '#0e7490', // Consistent teal brand color
+        fontWeight: '600',
     },
     commentMentioned: {
-        borderColor: '#4f46e5',
-        borderLeftWidth: 4,
         backgroundColor: '#f5f7ff',
     },
     mentionBadge: {
-        backgroundColor: '#e0e7ff',
+        backgroundColor: '#2a7da2', // Darker teal from screenshot
         paddingHorizontal: 8,
         paddingVertical: 2,
         borderRadius: 4,
     },
     mentionBadgeText: {
-        fontSize: 10,
-        color: '#4f46e5',
-        fontWeight: 'bold',
+        fontSize: 9,
+        color: '#fff',
+        fontWeight: '500',
+    },
+    mentionAtPill: {
+        backgroundColor: '#ebf8ff',
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 8,
+        alignSelf: 'flex-start',
+        marginBottom: 8,
+        borderWidth: 1,
+        borderColor: '#bee3f8',
+    },
+    mentionAtPillText: {
+        fontSize: 12,
+        color: '#2a7da2',
+        fontWeight: '500',
     },
     // Modal Styles
     modalOverlay: {
@@ -939,5 +1312,348 @@ const styles = StyleSheet.create({
     reportSubmitBtnText: {
         color: '#fff',
         fontWeight: '600',
+    },
+    quotedCommentBox: {
+        backgroundColor: '#f9fafb',
+        borderLeftWidth: 3,
+        borderLeftColor: '#0e7490',
+        padding: 8,
+        borderRadius: 4,
+        marginBottom: 8,
+    },
+    quotedCommentAuthor: {
+        fontSize: 12,
+        fontWeight: 'bold',
+        color: '#0e7490',
+        marginBottom: 2,
+    },
+    quotedCommentBody: {
+        fontSize: 13,
+        color: '#6b7280',
+        fontStyle: 'italic',
+    },
+    quotePreviewContainer: {
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        backgroundColor: '#f3f4f6',
+        flexDirection: 'row',
+        alignItems: 'center',
+        borderTopWidth: 1,
+        borderTopColor: '#e5e7eb',
+    },
+    quotePreviewContent: {
+        flex: 1,
+    },
+    quotePreviewAuthor: {
+        fontSize: 10,
+        fontWeight: 'bold',
+        color: '#0e7490',
+        marginBottom: 1,
+    },
+    quotePreviewText: {
+        fontSize: 12,
+        color: '#6b7280',
+        fontStyle: 'italic',
+    },
+    quotePreviewClose: {
+        marginLeft: 12,
+        padding: 4,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+    },
+    quoteClearText: {
+        fontSize: 12,
+        color: '#ef4444',
+        fontWeight: 'bold',
+    },
+    showMoreButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 8,
+        paddingHorizontal: 16,
+        marginBottom: 8,
+    },
+    repliesWrapper: {
+        marginLeft: 24,
+        borderLeftWidth: 1,
+        borderLeftColor: '#d1d5db',
+        paddingLeft: 12,
+    },
+    showMoreText: {
+        fontSize: 12,
+        color: '#0e7490',
+        fontWeight: '600',
+        marginLeft: 6,
+    },
+    replyCard: {
+        padding: 12,
+        marginBottom: 8,
+    },
+    replyBody: {
+        fontSize: 13,
+        fontWeight: '400',
+        marginBottom: 4,
+    },
+    commentLikeCountGuest: {
+        fontSize: 12,
+        color: '#9ca3af',
+        marginTop: 4,
+    },
+    authorActions: {
+        flexDirection: 'row',
+        gap: 12,
+        marginLeft: 'auto',
+    },
+    authorActionText: {
+        fontSize: 10,
+        fontWeight: '900',
+        color: '#0e7490',
+        letterSpacing: 0.5,
+    },
+    guestInputBanner: {
+        borderTopWidth: 1,
+        borderTopColor: '#e5e7eb',
+        backgroundColor: '#f9fafb',
+        paddingHorizontal: 20,
+        paddingVertical: 16,
+        alignItems: 'center',
+        gap: 12,
+    },
+    guestInputText: {
+        fontSize: 13,
+        color: '#6b7280',
+        textAlign: 'center',
+        lineHeight: 20,
+    },
+    guestInputBold: {
+        fontWeight: 'bold',
+        color: '#374151',
+    },
+    guestLoginBtn: {
+        backgroundColor: '#0e7490',
+        paddingHorizontal: 24,
+        paddingVertical: 10,
+        borderRadius: 20,
+    },
+    guestLoginBtnText: {
+        color: '#fff',
+        fontWeight: '700',
+        fontSize: 14,
+    },
+    // New Comment Input Styles
+    inputTriggerBar: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        backgroundColor: '#fff',
+        marginHorizontal: 16,
+        marginBottom: 16,
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#e5e7eb',
+        ...Platform.select({
+            ios: {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.05,
+                shadowRadius: 10,
+            },
+            android: {
+                elevation: 2,
+            },
+        }),
+    },
+    inputTriggerText: {
+        color: '#9ca3af',
+        fontSize: 14,
+    },
+    inputModalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'flex-end',
+    },
+    inputModalContent: {
+        backgroundColor: '#fff',
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
+        padding: 20,
+        paddingBottom: Platform.OS === 'ios' ? 40 : 24,
+    },
+    inputHandle: {
+        width: 40,
+        height: 4,
+        backgroundColor: '#e5e7eb',
+        borderRadius: 2,
+        alignSelf: 'center',
+        marginBottom: 12,
+    },
+    inputModalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+        alignItems: 'center',
+        height: 24,
+        marginBottom: 8,
+    },
+    clearQuoteBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+    },
+    clearQuoteText: {
+        fontSize: 12,
+        color: '#ef4444',
+        fontWeight: '600',
+    },
+    inputToolbar: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 16,
+        paddingVertical: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: '#f1f5f9',
+        marginBottom: 16,
+    },
+    toolbarDivider: {
+        width: 1,
+        height: 20,
+        backgroundColor: '#e2e8f0',
+    },
+    inputMainBox: {
+        borderWidth: 1,
+        borderColor: '#f1f5f9',
+        borderRadius: 16,
+        backgroundColor: '#f8fafc',
+        padding: 12,
+        minHeight: 180,
+    },
+    inputQuoteBox: {
+        backgroundColor: '#fff',
+        padding: 12,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#f1f5f9',
+        marginBottom: 12,
+    },
+    inputQuoteAuthor: {
+        fontSize: 12,
+        fontWeight: 'bold',
+        color: '#0e7490',
+        marginBottom: 4,
+    },
+    inputQuoteBody: {
+        fontSize: 13,
+        color: '#475569',
+        lineHeight: 18,
+    },
+    modalTextInput: {
+        fontSize: 15,
+        color: '#1e293b',
+        textAlignVertical: 'top',
+        flex: 1,
+        ...Platform.select({
+            web: { outlineStyle: 'none' } as any,
+        }),
+    },
+    inputGuidelines: {
+        fontSize: 12,
+        color: '#64748b',
+        marginTop: 16,
+        marginBottom: 20,
+        textAlign: 'left',
+    },
+    inputSubmitBtn: {
+        backgroundColor: '#0e7490',
+        paddingVertical: 14,
+        borderRadius: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    inputSubmitBtnText: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: 'bold',
+    },
+    // Redesigned Header Styles
+    authorRowMinimal: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 16,
+    },
+    authorNameHeader: {
+        color: '#0e7490', // Teal
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    authorDateSeparator: {
+        color: '#9ca3af',
+        marginHorizontal: 6,
+        fontSize: 14,
+    },
+    authorDateHeader: {
+        color: '#9ca3af',
+        fontSize: 14,
+    },
+    headerBottomRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginTop: 'auto',
+    },
+    statsGroup: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 16,
+    },
+    statItemMini: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+    },
+    statTextMini: {
+        color: '#9ca3af',
+        fontSize: 12,
+        fontWeight: '500',
+    },
+    subscribedPill: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        borderWidth: 1,
+        borderColor: '#4b5563',
+        borderRadius: 8,
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        gap: 6,
+    },
+    checkIcon: {
+        color: '#10b981', // Green
+        fontSize: 14,
+    },
+    subscribedText: {
+        color: '#fff',
+        fontSize: 13,
+        fontWeight: '500',
+    },
+    parentActionsRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 20,
+        marginTop: 16,
+        paddingTop: 12,
+        borderTopWidth: 1,
+        borderTopColor: '#f1f5f9',
+    },
+    parentActionBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+    },
+    parentActionText: {
+        color: '#64748b',
+        fontSize: 13,
+        fontWeight: '500',
     },
 });

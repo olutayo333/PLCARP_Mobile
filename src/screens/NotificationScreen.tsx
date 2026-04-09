@@ -1,9 +1,9 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 
 import CustomAlert from '../utils/CustomAlert';
 const Alert = CustomAlert;
 import { StyleSheet, View, Text, TouchableOpacity, FlatList, Image, ActivityIndicator, RefreshControl, ScrollView, Animated, Modal, Platform } from 'react-native';;
-import { Bell, CheckCheck, Trash2, MessageSquare, Heart, Filter, RefreshCcw, UserCheck, Calendar, ChevronDown, Info, CheckCircle, CheckCircle2, Clock } from 'lucide-react-native';
+import { Bell, CheckCheck, Trash2, MessageSquare, Heart, Filter, RefreshCcw, UserCheck, Calendar, ChevronDown, Info, CheckCircle, CheckCircle2, Clock, ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
     useGetNotificationsQuery,
@@ -36,6 +36,7 @@ const timeAgo = (date: Date) => {
 export function NotificationScreen({ isLoggedIn, navigation }: { isLoggedIn?: boolean; navigation?: any }) {
     const insets = useSafeAreaInsets();
     const statusTabs = ['All', 'Unread'];
+    const flatListRef = useRef<FlatList>(null);
 
     // Comprehensive labels for all available notification types from the API
     const CATEGORIES = [
@@ -75,10 +76,12 @@ export function NotificationScreen({ isLoggedIn, navigation }: { isLoggedIn?: bo
     // API Hooks
     const { data, isLoading, isFetching, refetch } = useGetNotificationsQuery({
         page,
-        limit: 20,
+        limit: 10,
         isRead: activeStatus === 'Unread' ? false : undefined,
         type: activeCategory === 'All' ? undefined : activeCategory as any,
     }, { skip: !isLoggedIn });
+
+    console.log('[NotificationScreen] Render State:', { page, isFetching, dataLength: data?.notifications?.length, dataPage: data?.page });
 
     const [markAllRead] = useMarkAllReadMutation();
     const [markRead] = useMarkReadMutation();
@@ -88,7 +91,7 @@ export function NotificationScreen({ isLoggedIn, navigation }: { isLoggedIn?: bo
     const dispatch = useDispatch();
 
     const notifications = data?.notifications || [];
-
+    console.log('notifications', notifications)
     const handleMarkAllRead = () => {
         showConfirm({
             title: 'Mark all as read',
@@ -97,12 +100,12 @@ export function NotificationScreen({ isLoggedIn, navigation }: { isLoggedIn?: bo
             onConfirm: async () => {
                 try {
                     const response = await markAllRead().unwrap() as any;
-                    if(response?.status){
+                    if (response?.status) {
                         dispatch(showToast({
                             message: response?.message || 'All notifications marked as read',
                             type: 'success'
                         }));
-                    }else{
+                    } else {
                         dispatch(showToast({
                             message: response?.message || 'Failed to mark all notifications as read',
                             type: 'error'
@@ -147,13 +150,13 @@ export function NotificationScreen({ isLoggedIn, navigation }: { isLoggedIn?: bo
             onConfirm: async () => {
                 try {
                     const response = await deleteNotification(id).unwrap() as any;
-                    if(response?.status){
+                    if (response?.status) {
                         dispatch(showToast({
                             message: response?.message || 'Notification deleted',
                             type: 'success'
                         }));
                     }
-                    else{
+                    else {
                         dispatch(showToast({
                             message: response?.message || 'Failed to delete notification',
                             type: 'error'
@@ -213,68 +216,26 @@ export function NotificationScreen({ isLoggedIn, navigation }: { isLoggedIn?: bo
     };
 
     const renderItem = ({ item }: { item: Notification }) => {
-        const hasMeta = item.data?.meta;
-        const eventTitle = hasMeta?.eventTitle;
-        const startTime = hasMeta?.startTime;
+        const isUnread = item?.isRead === false;
 
         return (
             <TouchableOpacity
-                style={[styles.item, !item.isRead && styles.itemUnread]}
+                style={[styles.item, isUnread && styles.itemUnread]}
                 onPress={() => handleNotificationPress(item)}
             >
-                {/* Left Strip */}
-                <View style={[styles.leftStrip, { backgroundColor: item.isRead ? '#e5e7eb' : '#0e7490' }]} />
-
                 <View style={styles.itemInner}>
                     <View style={styles.itemMainRow}>
-                        <View style={styles.iconBox}>
-                            {getIcon(item.type)}
-                        </View>
-
-                        <View style={styles.itemHeaderContent}>
-                            <View style={styles.itemTitleRow}>
-                                <Text style={[styles.itemTitle, !item.isRead && styles.textBold]}>
-                                    {item.title}
-                                </Text>
-                                {!item.isRead && <View style={styles.unreadDot} />}
-                            </View>
-                            <View style={styles.timeAgoRow}>
-                                <Clock size={14} color="#9ca3af" />
-                                <Text style={styles.itemTime}>
-                                    about {timeAgo(new Date(item.createdAt)).replace(' ago', '')} ago
-                                </Text>
-                            </View>
-                        </View>
+                        {isUnread && <View style={styles.unreadDot} />}
+                        <Text style={[styles.itemTitle, isUnread && styles.textBold]} numberOfLines={1}>
+                            {item.title}
+                        </Text>
                     </View>
 
-                    <Text style={styles.itemBody} numberOfLines={3}>{item.body}</Text>
+                    <Text style={styles.itemBody} numberOfLines={2}>{item.body}</Text>
 
-                    {/* Metadata Pills */}
-                    {(eventTitle || startTime) && (
-                        <View style={styles.metaContainer}>
-                            {eventTitle && (
-                                <View style={styles.metaPill}>
-                                    <Calendar size={14} color="#0e7490" />
-                                    <Text style={styles.metaPillText} numberOfLines={1}>{eventTitle}</Text>
-                                </View>
-                            )}
-                            {startTime && (
-                                <View style={styles.metaPill}>
-                                    <Clock size={14} color="#0e7490" />
-                                    <Text style={styles.metaPillText}>
-                                        {new Date(startTime).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                                    </Text>
-                                </View>
-                            )}
-                        </View>
-                    )}
-
-                    <View style={styles.itemFooter}>
-                        <Text style={styles.viewDetailsText}>VIEW DETAILS</Text>
-                        <TouchableOpacity onPress={() => handleDelete(item.id)} style={styles.deleteButton}>
-                            <Trash2 size={18} color="#d1d5db" />
-                        </TouchableOpacity>
-                    </View>
+                    <Text style={styles.itemTime}>
+                        {timeAgo(new Date(item.createdAt))}
+                    </Text>
                 </View>
             </TouchableOpacity>
         );
@@ -300,18 +261,27 @@ export function NotificationScreen({ isLoggedIn, navigation }: { isLoggedIn?: bo
         });
     };
 
-    const handleLoadMore = () => {
+    const handleNextPage = () => {
         if (!data || isFetching) return;
-        const hasMore = data.notifications.length < data.total;
-        if (hasMore) {
+        const totalPages = Math.ceil(data.total / data.limit);
+        if (page < totalPages) {
             setPage(prev => prev + 1);
         }
+    };
+
+    const handlePrevPage = () => {
+        if (isFetching || page <= 1) return;
+        setPage(prev => prev - 1);
     };
 
     const handleRefresh = () => {
         setPage(1);
         refetch();
     };
+
+    useEffect(() => {
+        flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+    }, [page]);
 
     const handleTabChange = (tabName: 'All' | 'Unread') => {
         setActiveStatus(tabName);
@@ -427,6 +397,7 @@ export function NotificationScreen({ isLoggedIn, navigation }: { isLoggedIn?: bo
             )}
 
             <FlatList
+                ref={flatListRef}
                 data={notifications}
                 keyExtractor={item => item.id}
                 renderItem={renderItem}
@@ -434,15 +405,40 @@ export function NotificationScreen({ isLoggedIn, navigation }: { isLoggedIn?: bo
                 refreshControl={
                     <RefreshControl refreshing={isFetching && page === 1} onRefresh={handleRefresh} tintColor="#0e7490" />
                 }
-                onEndReached={handleLoadMore}
-                onEndReachedThreshold={0.3}
-                ListFooterComponent={() => (
-                    isFetching && page > 1 ? (
-                        <View style={{ paddingVertical: 20 }}>
-                            <NotificationSkeleton />
+                ListFooterComponent={() => {
+                    if (isLoading || !data || data.total === 0) return null;
+                    const totalPages = Math.ceil(data.total / data.limit);
+
+                    return (
+                        <View style={styles.paginationContainer}>
+                            <TouchableOpacity
+                                style={[styles.paginationButton, page <= 1 && styles.paginationButtonDisabled]}
+                                onPress={handlePrevPage}
+                                disabled={page <= 1 || isFetching}
+                            >
+                                <ChevronLeft size={16} color={page <= 1 ? '#9ca3af' : '#374151'} />
+                                <Text style={[styles.paginationButtonText, page <= 1 && styles.paginationButtonTextDisabled]}>
+                                    Previous
+                                </Text>
+                            </TouchableOpacity>
+
+                            <Text style={styles.paginationText}>
+                                Page {page} of {totalPages || 1}
+                            </Text>
+
+                            <TouchableOpacity
+                                style={[styles.paginationButton, page >= totalPages && styles.paginationButtonDisabled]}
+                                onPress={handleNextPage}
+                                disabled={page >= totalPages || isFetching}
+                            >
+                                <Text style={[styles.paginationButtonText, page >= totalPages && styles.paginationButtonTextDisabled]}>
+                                    Next
+                                </Text>
+                                <ChevronRight size={16} color={page >= totalPages ? '#9ca3af' : '#374151'} />
+                            </TouchableOpacity>
                         </View>
-                    ) : null
-                )}
+                    );
+                }}
                 ListHeaderComponent={isLoading || (isFetching && page === 1) ? (
                     <View style={{ paddingTop: 8 }}>
                         <NotificationSkeleton />
@@ -624,6 +620,8 @@ const styles = StyleSheet.create({
     },
     topControls: {
         paddingBottom: 8,
+        zIndex: 100,
+        elevation: 10,
     },
     filterBar: {
         flexDirection: 'row',
@@ -718,8 +716,9 @@ const styles = StyleSheet.create({
         shadowOffset: { width: 0, height: 10 },
         shadowOpacity: 0.1,
         shadowRadius: 20,
-        elevation: 10,
+        elevation: 20,
         padding: 8,
+        zIndex: 500,
     },
     dropdownItem: {
         padding: 12,
@@ -741,69 +740,40 @@ const styles = StyleSheet.create({
     },
     item: {
         flexDirection: 'row',
-        marginHorizontal: 16,
-        marginBottom: 12,
-        borderRadius: 16,
         backgroundColor: '#fff',
-        overflow: 'hidden',
-        // Shadow for iOS/Web
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 8,
-        // Elevation for Android
-        elevation: 2,
-        borderWidth: 1,
+        borderBottomWidth: 1,
         borderColor: '#f1f5f9',
     },
     itemUnread: {
-        backgroundColor: '#f8fbff',
-        borderColor: '#dbeafe',
-    },
-    leftStrip: {
-        width: 6,
-        height: '100%',
+        backgroundColor: '#e0f2fe',
     },
     itemInner: {
         flex: 1,
-        padding: 16,
-        gap: 12,
+        paddingHorizontal: 20,
+        paddingVertical: 16,
     },
     itemMainRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 12,
-    },
-    iconBox: {
-        width: 48,
-        height: 48,
-        borderRadius: 14,
-        backgroundColor: '#fff',
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderWidth: 1,
-        borderColor: '#f1f5f9',
-        // Shadow for premium look
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 4,
-        elevation: 1,
-    },
-    itemHeaderContent: {
-        flex: 1,
-        gap: 0,
-    },
-    itemTitleRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'flex-start',
-        gap: 8,
+        marginBottom: 4,
     },
     timeAgoRow: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 4,
+    },
+    itemHeaderContent: {
+        flex: 1,
+        justifyContent: 'center',
+    },
+    iconBox: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        backgroundColor: '#f8fafc',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 16,
     },
     metaContainer: {
         flexDirection: 'column',
@@ -840,18 +810,20 @@ const styles = StyleSheet.create({
         height: 8,
         borderRadius: 4,
         backgroundColor: '#ef4444',
+        marginRight: 8,
     },
     itemTitle: {
-        fontSize: 16,
-        color: '#0e7490', // Blue title as in screenshot
-        flex: 0,
+        fontSize: 15,
+        color: '#111827',
+        fontWeight: '500',
+        flex: 1,
     },
     textBold: {
-        fontWeight: 'bold',
+        fontWeight: '700',
     },
     itemBody: {
         fontSize: 14,
-        color: '#475569',
+        color: '#4b5563',
         lineHeight: 20,
     },
     itemFooter: {
@@ -1044,5 +1016,41 @@ const styles = StyleSheet.create({
         fontSize: 15,
         color: '#374151',
         lineHeight: 24,
+    },
+    paginationContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingVertical: 24,
+        paddingHorizontal: 16,
+        marginBottom: 40,
+    },
+    paginationButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#fff',
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#e5e7eb',
+        gap: 4,
+    },
+    paginationButtonDisabled: {
+        backgroundColor: '#f9fafb',
+        borderColor: '#f3f4f6',
+    },
+    paginationButtonText: {
+        fontSize: 14,
+        fontWeight: '500',
+        color: '#374151',
+    },
+    paginationButtonTextDisabled: {
+        color: '#9ca3af',
+    },
+    paginationText: {
+        fontSize: 14,
+        color: '#6b7280',
+        fontWeight: '500',
     },
 });
