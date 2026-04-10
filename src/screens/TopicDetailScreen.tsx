@@ -24,14 +24,6 @@ import {
     ChevronUp,
     ChevronDown,
     Edit2,
-    Undo2,
-    Redo2,
-    Bold,
-    Italic,
-    Underline,
-    Strikethrough,
-    ListOrdered,
-    List,
 } from 'lucide-react-native';
 import {
     useGetTopicByIdQuery,
@@ -246,19 +238,27 @@ export function TopicDetailScreen({ communityId, topicId, quoteCommentId, replyC
 
     const handleInputChange = (text: string) => {
         setCommentText(text);
-        const match = text.match(/@(\w*)$/);
-        if (match) {
-            setMentionQuery(match[1]);
-            setShowMentions(true);
-        } else {
-            setShowMentions(false);
-            setMentionQuery('');
+        const lastAt = text.lastIndexOf('@');
+        if (lastAt !== -1) {
+            const query = text.substring(lastAt + 1);
+            if (!query.includes(' ')) {
+                setMentionQuery(query);
+                setShowMentions(true);
+                return;
+            }
         }
+        setShowMentions(false);
+        setMentionQuery('');
     };
 
     const handleSelectMention = (member: { id: string; fullName: string }) => {
-        // Strip the @trigger from the text (keep comment body clean)
-        const newText = commentText.replace(/@\w*$/, '');
+        // Find the last @ and remove it and the typed query
+        const lastAt = commentText.lastIndexOf('@');
+        // We append the selected member's full name, followed by a space, so they can keep typing.
+        const newText = lastAt !== -1
+            ? commentText.substring(0, lastAt) + `@${member.fullName} `
+            : commentText + `@${member.fullName} `;
+
         setCommentText(newText);
         setShowMentions(false);
         setMentionQuery('');
@@ -734,7 +734,6 @@ export function TopicDetailScreen({ communityId, topicId, quoteCommentId, replyC
                 style={styles.inputModalOverlay}
             >
                 <View style={styles.inputModalContent}>
-                    <View style={styles.inputHandle} />
 
                     <View style={styles.inputModalHeader}>
                         {(replyToComment || quotedComment) ? (
@@ -749,19 +748,6 @@ export function TopicDetailScreen({ communityId, topicId, quoteCommentId, replyC
                                 <Text style={styles.clearQuoteText}>Clear quote</Text>
                             </TouchableOpacity>
                         ) : <View />}
-                    </View>
-
-                    <View style={styles.inputToolbar}>
-                        <Undo2 size={20} color="#64748b" />
-                        <Redo2 size={20} color="#64748b" />
-                        <View style={styles.toolbarDivider} />
-                        <Bold size={20} color="#1e293b" />
-                        <Italic size={20} color="#64748b" />
-                        <Underline size={20} color="#64748b" />
-                        <Strikethrough size={20} color="#64748b" />
-                        <View style={styles.toolbarDivider} />
-                        <ListOrdered size={20} color="#64748b" />
-                        <List size={20} color="#64748b" />
                     </View>
 
                     <View style={styles.inputMainBox}>
@@ -783,6 +769,28 @@ export function TopicDetailScreen({ communityId, topicId, quoteCommentId, replyC
                             multiline
                             autoFocus
                         />
+                        {showMentions && filteredResults.length > 0 && (
+                            <View style={{ backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8, marginTop: 8, maxHeight: 150 }}>
+                                <ScrollView keyboardShouldPersistTaps="handled">
+                                    {filteredResults.map(member => (
+                                        <TouchableOpacity
+                                            key={member.id}
+                                            style={{ flexDirection: 'row', alignItems: 'center', padding: 12, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' }}
+                                            onPress={() => handleSelectMention(member)}
+                                        >
+                                            {member.avatarUrl ? (
+                                                <Image source={{ uri: member.avatarUrl }} style={{ width: 24, height: 24, borderRadius: 12, marginRight: 8 }} />
+                                            ) : (
+                                                <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: '#0e7490', alignItems: 'center', justifyContent: 'center', marginRight: 8 }}>
+                                                    <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>{member.fullName.charAt(0)}</Text>
+                                                </View>
+                                            )}
+                                            <Text style={{ fontSize: 14, color: '#1e293b' }}>{member.fullName}</Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </ScrollView>
+                            </View>
+                        )}
                     </View>
 
                     <Text style={styles.inputGuidelines}>

@@ -18,6 +18,7 @@ import {
     Rss,
 } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as ImagePicker from 'expo-image-picker';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../store';
 import { logout } from '../store/slices/userSlice';
@@ -510,8 +511,6 @@ function EditProfileScreen({ onBack }: { onBack: () => void }) {
 
     const handleEditAvatar = async () => {
         try {
-            // Dynamically import to avoid crashing if native module is unavailable
-            const ImagePicker = await import('expo-image-picker');
             const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
             if (status !== 'granted') {
                 showConfirm({ title: 'Permission Denied', message: 'We need camera roll permissions to change your avatar.', confirmText: 'OK', hideCancel: true, onConfirm: () => { } });
@@ -762,7 +761,6 @@ function OrgProfileScreen({ onBack }: { onBack: () => void }) {
 
     const handleEditLogo = async () => {
         try {
-            const ImagePicker = await import('expo-image-picker');
             const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
             if (status !== 'granted') {
                 showConfirm({ title: 'Permission Required', message: 'We need camera roll permissions to change your logo.', confirmText: 'OK', hideCancel: true, onConfirm: () => { } });
