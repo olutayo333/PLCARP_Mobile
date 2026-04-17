@@ -438,18 +438,20 @@ export function FeedScreen({ route }: any) {
                 <GuestWelcomeBanner navigation={navigation} />
             )}
 
-            <View style={styles.searchContainer}>
-                <View style={styles.searchBar}>
-                    <Search size={20} color="#9ca3af" />
-                    <TextInput
-                        style={[styles.searchInput, Platform.OS === 'web' ? { outlineStyle: 'none' } as any : null]}
-                        placeholder={`Search ${activeSubTab === 'communities' ? 'communities' : 'topics'}...`}
-                        value={searchQuery}
-                        onChangeText={setSearchQuery}
-                        placeholderTextColor="#9ca3af"
-                    />
+            {(activeSubTab === 'topics' || activeSubTab === 'communities') && (
+                <View style={styles.searchContainer}>
+                    <View style={styles.searchBar}>
+                        <Search size={20} color="#9ca3af" />
+                        <TextInput
+                            style={[styles.searchInput, Platform.OS === 'web' ? { outlineStyle: 'none' } as any : null]}
+                            placeholder={`Search ${activeSubTab === 'communities' ? 'communities' : 'topics'}...`}
+                            value={searchQuery}
+                            onChangeText={setSearchQuery}
+                            placeholderTextColor="#9ca3af"
+                        />
+                    </View>
                 </View>
-            </View>
+            )}
 
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.subTabs} contentContainerStyle={styles.subTabsContent}>
                 {['Topics', 'Activities', 'Communities', 'Mentions'].map((tab) => {
@@ -649,7 +651,7 @@ export function FeedScreen({ route }: any) {
 
             <FlatList
                 ref={flatListRef}
-                data={(isFetching && currentPage === 1)
+                data={((isLoading || (isFetching && (searchQuery !== '' || categorySearch !== ''))) && currentPage === 1)
                     ? []
                     : (activeSubTab === 'topics'
                         ? (topics || [])
@@ -659,12 +661,24 @@ export function FeedScreen({ route }: any) {
                                     : []
                     )
                 }
-                renderItem={({ item }: { item: any }) => {
+                renderItem={({ item, index }: { item: any; index: number }) => {
+                    const dataArray = (activeSubTab === 'topics'
+                        ? (topics || [])
+                        : activeSubTab === 'communities' ? (communityFilter === 'subscribed' ? (subscriptions?.map(c => ({ ...c, joined: true })) || []) : (communitiesListData?.communities || []))
+                            : activeSubTab === 'mentions' ? (mentions || [])
+                                : activeSubTab === 'activities' ? (activityFeedData || [])
+                                    : []
+                    );
+                    const isFirst = index === 0;
+                    const isLast = index === dataArray.length - 1;
+
                     if (activeSubTab === 'topics') {
                         return (
                             <TopicCard
                                 topic={item}
                                 isLoggedIn={isLoggedIn}
+                                isFirst={isFirst}
+                                isLast={isLast}
                                 onPress={() => {
                                     navigation.navigate('TopicDetail', {
                                         communityId: item.communityId,
@@ -679,6 +693,8 @@ export function FeedScreen({ route }: any) {
                             <CommunityCard
                                 community={item}
                                 isLoggedIn={isLoggedIn}
+                                isFirst={isFirst}
+                                isLast={isLast}
                                 onPress={() => navigation.navigate('CommunityDetail', { communityId: item.id })}
                                 onSubscribe={() => handleCommunityAction(item)}
                                 isJoined={communityFilter === 'subscribed' || !!item.joined || !!item.isJoined || !!item.isSubscribed}
@@ -693,7 +709,7 @@ export function FeedScreen({ route }: any) {
                     }
                     if (activeSubTab === 'activities') {
                         return (
-                            <View style={[styles.activityItem, { padding: 0, overflow: 'hidden' }]}>
+                            <View style={styles.activityItem}>
                                 <TouchableOpacity
                                     style={{ padding: 16, flexDirection: 'row' }}
                                     activeOpacity={0.7}
@@ -715,7 +731,7 @@ export function FeedScreen({ route }: any) {
                                         <MessageCircle size={20} color="#0e7490" />
                                     </View>
                                     <View style={{ flex: 1 }}>
-                                        <Text style={styles.activityRe} numberOfLines={1}>
+                                        <Text style={styles.activityRe}>
                                             Re: {item.topic?.title || item.topicTitle}
                                         </Text>
                                         <View style={styles.activityHeaderRow}>
@@ -821,7 +837,7 @@ export function FeedScreen({ route }: any) {
                     return null;
                 }}
                 ListEmptyComponent={() => {
-                    if (isLoading || isFetching) return <FeedSkeleton />;
+                    if (isLoading || (isFetching && (searchQuery !== '' || categorySearch !== ''))) return <FeedSkeleton />;
 
                     if (activeSubTab === 'mentions') {
                         return (
@@ -979,11 +995,11 @@ export function FeedScreen({ route }: any) {
 const styles = StyleSheet.create({
     screenContainer: {
         flex: 1,
-        backgroundColor: '#fff',
+        backgroundColor: '#f1f5f9',
         paddingBottom: 24,
     },
     feedHeaderContainer: {
-        backgroundColor: '#fff',
+        backgroundColor: '#f1f5f9',
     },
     headerTopRow: {
         flexDirection: 'row',
@@ -1024,7 +1040,7 @@ const styles = StyleSheet.create({
         fontWeight: 'normal',
     },
     analyticsCard: {
-        backgroundColor: '#f1f5f9',
+        backgroundColor: '#fff',
         borderRadius: 20,
         paddingVertical: 20,
         paddingHorizontal: 10,
@@ -1284,8 +1300,9 @@ const styles = StyleSheet.create({
     },
     activityActions: {
         flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
+        columnGap: 16,
+        rowGap: 8,
+        flexWrap: 'wrap',
     },
     activityActionBtn: {
         padding: 4,
@@ -1333,9 +1350,9 @@ const styles = StyleSheet.create({
     },
     guestBanner: {
         padding: 16,
-        backgroundColor: '#fff',
+        backgroundColor: '#f1f5f9',
         borderBottomWidth: 1,
-        borderBottomColor: '#f3f4f6',
+        borderBottomColor: '#f1f5f9',
     },
     guestBannerContent: {
         backgroundColor: '#0e7490',
@@ -1382,9 +1399,9 @@ const styles = StyleSheet.create({
     },
     searchContainer: {
         padding: 16,
-        backgroundColor: '#fff',
+        backgroundColor: '#f1f5f9',
         borderBottomWidth: 1,
-        borderBottomColor: '#f3f4f6',
+        borderBottomColor: '#f1f5f9',
     },
     searchBar: {
         flexDirection: 'row',
@@ -1557,11 +1574,11 @@ const styles = StyleSheet.create({
         color: '#fff',
     },
     communitySelectorContainer: {
-        backgroundColor: '#fff',
+        backgroundColor: '#f1f5f9',
         paddingHorizontal: 16,
         paddingVertical: 12,
         borderBottomWidth: 1,
-        borderBottomColor: '#f3f4f6',
+        borderBottomColor: '#f1f5f9',
     },
     dropdownTrigger: {
         backgroundColor: '#f9fafb',
@@ -1663,21 +1680,14 @@ const styles = StyleSheet.create({
         fontSize: 14,
     },
     activityItem: {
-        flexDirection: 'row',
-        alignItems: 'flex-start',
-        gap: 12,
+        flexDirection: 'column',
         backgroundColor: '#fff',
         marginHorizontal: 16,
-        marginBottom: 12,
-        padding: 16,
+        marginVertical: 8,
         borderRadius: 16,
         borderWidth: 1,
-        borderColor: '#f1f5f9',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 6,
-        elevation: 2,
+        borderColor: '#cbd5e1',
+        overflow: 'hidden',
     },
     activityIconBox: {
         width: 40,
@@ -1697,7 +1707,7 @@ const styles = StyleSheet.create({
         fontSize: 13,
         color: '#6b7280',
         lineHeight: 18,
-        marginBottom: 6,
+        marginBottom: 4,
     },
     activityDate: {
         fontSize: 12,
@@ -1725,11 +1735,11 @@ const styles = StyleSheet.create({
     activityActionRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginTop: 10,
+        marginTop: 4,
         gap: 16,
         borderTopWidth: 1,
         borderTopColor: '#f1f5f9',
-        paddingTop: 10,
+        paddingTop: 6,
     },
     activityAction: {
         flexDirection: 'row',
@@ -1743,7 +1753,7 @@ const styles = StyleSheet.create({
     },
     activityRe: {
         fontSize: 12,
-        fontWeight: '700',
+        fontWeight: '600',
         color: '#334155',
         marginBottom: 2,
     },
@@ -1763,7 +1773,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 8,
+        marginBottom: 4,
     },
     activitySector: {
         fontSize: 11,

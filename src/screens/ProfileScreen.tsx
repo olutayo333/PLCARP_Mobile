@@ -16,6 +16,7 @@ import {
     ArrowLeft,
     Camera,
     Rss,
+    Trash2,
 } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
@@ -32,6 +33,7 @@ import {
     useUpdateExpertProfileMutation,
     uploadAvatarApi,
     uploadOrgLogoApi,
+    useDeleteAccountMutation,
 } from '../services/profileApi';
 import { useGetMySubscriptionsQuery, useGetGeneralAnalyticsQuery } from '../services/communityApi';
 import { useSendPasswordVerificationCodeMutation } from '../services/authApi';
@@ -65,6 +67,7 @@ export function ProfileScreen({ navigation }: { navigation?: any }) {
     const { data: generalAnalytics } = useGetGeneralAnalyticsQuery(undefined, { skip: !isLoggedIn });
     const [showPasswordModal, setShowPasswordModal] = useState(false);
     const [passwordResetSent, setPasswordResetSent] = useState(false);
+    const [deleteAccountMutation, { isLoading: isDeletingAccount }] = useDeleteAccountMutation();
 
     const handleLogout = async () => {
         try {
@@ -74,6 +77,21 @@ export function ProfileScreen({ navigation }: { navigation?: any }) {
             dismissConfirm();
         } catch (e) {
             console.error('Logout failed', e);
+        }
+    };
+
+    const handleDeleteAccount = async () => {
+        try {
+            const response = await deleteAccountMutation().unwrap() as any;
+            if (response?.status) {
+                dispatch(showToast({ message: response?.message || 'Account deleted successfully', type: 'success' }));
+                handleLogout();
+            } else {
+                showConfirm({ title: 'Error', message: response?.message || 'Failed to delete account', confirmText: 'OK', hideCancel: true, onConfirm: () => { } });
+            }
+        } catch (err: any) {
+            console.error('Account deletion error:', err);
+            showConfirm({ title: 'Error', message: err?.data?.message || 'Failed to delete account. Please try again.', confirmText: 'Retry', hideCancel: true, onConfirm: () => { } });
         }
     };
 
@@ -389,6 +407,20 @@ export function ProfileScreen({ navigation }: { navigation?: any }) {
                                 confirmText: 'Logout',
                                 danger: true,
                                 onConfirm: handleLogout
+                            })}
+                        />
+                        <View style={styles.menuDivider} />
+                        <MenuItem
+                            icon={Trash2}
+                            label="Delete Account"
+                            subLabel="Permanently remove your data"
+                            isLogout
+                            onPress={() => showConfirm({
+                                title: 'Delete Account',
+                                message: 'Are you sure you want to delete your account? This action is permanent and will delete all your data.',
+                                confirmText: 'Delete',
+                                danger: true,
+                                onConfirm: handleDeleteAccount
                             })}
                         />
                     </View>

@@ -30,18 +30,19 @@ export function ActivityCard({ activity }: { activity: any }) {
 const styles = StyleSheet.create({
     activityCard: {
         backgroundColor: '#fff',
-        padding: 16,
-        marginBottom: 8,
-        borderRadius: 12,
+        padding: 10,
+        marginHorizontal: 16,
+        marginVertical: 8,
+        borderRadius: 16,
         borderWidth: 1,
-        borderColor: '#f3f4f6',
+        borderColor: '#cbd5e1',
     },
     activityHeader: {
-        marginBottom: 8,
+        marginBottom: 1,
     },
     activityTitle: {
         fontSize: 14,
-        fontWeight: 'bold',
+        fontWeight: '600',
         color: '#111827',
     },
     activityMeta: {
@@ -57,11 +58,13 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: '#374151',
         lineHeight: 20,
-        marginBottom: 12,
+        marginBottom: 1,
     },
     activityActions: {
         flexDirection: 'row',
-        gap: 16,
+        columnGap: 16,
+        rowGap: 8,
+        flexWrap: 'wrap',
     },
     activityAction: {
         flexDirection: 'row',

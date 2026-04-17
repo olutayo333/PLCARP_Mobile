@@ -31,9 +31,11 @@ interface TopicCardProps {
   topic: CommunityTopicDetail;
   isLoggedIn?: boolean;
   onPress?: () => void;
+  isFirst?: boolean;
+  isLast?: boolean;
 }
 
-export function TopicCard({ topic, isLoggedIn, onPress }: TopicCardProps) {
+export function TopicCard({ topic, isLoggedIn, onPress, isFirst, isLast }: TopicCardProps) {
   const dispatch = useDispatch();
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
 
@@ -93,7 +95,12 @@ export function TopicCard({ topic, isLoggedIn, onPress }: TopicCardProps) {
 
   return (
     <TouchableOpacity
-      style={styles.container}
+      style={[
+        styles.container,
+        isFirst && { borderTopLeftRadius: 16, borderTopRightRadius: 16 },
+        isLast && { borderBottomLeftRadius: 16, borderBottomRightRadius: 16 },
+        { overflow: 'hidden' }
+      ]}
       onPress={onPress}
       activeOpacity={0.7}
     >
@@ -154,8 +161,10 @@ const styles = StyleSheet.create({
   container: {
     backgroundColor: '#fff',
     padding: 16,
-    borderBottomWidth: 1,
-    borderColor: '#f1f5f9',
+    marginHorizontal: 16,
+    marginVertical: 0,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
   },
   header: {
     flexDirection: 'row',
@@ -204,7 +213,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 16,
-    fontWeight: '800',
+    fontWeight: '700',
     color: '#0f172a',
     marginBottom: 6,
     lineHeight: 22,

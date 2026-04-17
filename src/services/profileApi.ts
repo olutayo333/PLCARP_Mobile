@@ -216,6 +216,18 @@ export const profileApiSlice = apiSlice.injectEndpoints({
             invalidatesTags: ['OrgProfile', 'UserProfile'],
         }),
 
+        /** DELETE /users/profile
+         *  Permanently delete the current user's account and all associated data.
+         *  Strictly required by App/Play Store policies.
+         */
+        deleteAccount: builder.mutation<{ status: boolean; message: string }, void>({
+            query: () => ({
+                url: `/users/profile`,
+                method: REQUEST_METHODS.DELETE,
+            }),
+            invalidatesTags: ['UserProfile'],
+        }),
+
     }),
 });
 
@@ -232,6 +244,8 @@ export const {
     // Organisation profile
     useGetOrgProfileQuery,
     useUpdateOrgProfileMutation,
+    // Account deletion
+    useDeleteAccountMutation,
 } = profileApiSlice;
 
 // ─── Axios — File Uploads ─────────────────────────────────────────────────────

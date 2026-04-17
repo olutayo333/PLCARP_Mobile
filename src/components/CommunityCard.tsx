@@ -7,19 +7,28 @@ export function CommunityCard({
     isLoggedIn,
     onPress,
     onSubscribe,
-    isJoined: isJoinedProp
+    isJoined: isJoinedProp,
+    isFirst,
+    isLast
 }: {
     community: any;
     isLoggedIn?: boolean;
     onPress?: () => void;
     onSubscribe?: () => void;
     isJoined?: boolean;
+    isFirst?: boolean;
+    isLast?: boolean;
 }) {
     const isJoined = isJoinedProp ?? (!!community.joined || !!community.isJoined || !!community.isSubscribed);
 
     return (
         <TouchableOpacity
-            style={styles.container}
+            style={[
+                styles.container,
+                isFirst && { borderTopLeftRadius: 16, borderTopRightRadius: 16 },
+                isLast && { borderBottomLeftRadius: 16, borderBottomRightRadius: 16 },
+                { overflow: 'hidden' }
+            ]}
             onPress={onPress}
             activeOpacity={0.7}
         >
@@ -74,10 +83,11 @@ export function CommunityCard({
 const styles = StyleSheet.create({
     container: {
         backgroundColor: '#fff',
-        paddingHorizontal: 16,
-        paddingVertical: 18,
-        borderBottomWidth: 1,
-        borderColor: '#f1f5f9',
+        padding: 16,
+        marginHorizontal: 16,
+        marginVertical: 0,
+        borderWidth: 1,
+        borderColor: '#cbd5e1',
     },
     topInfo: {
         marginBottom: 12,
@@ -89,9 +99,10 @@ const styles = StyleSheet.create({
         fontWeight: '500',
     },
     name: {
-        fontSize: 15,
-        fontWeight: '700',
-        color: '#111827',
+        fontSize: 18,
+        fontWeight: '600',
+        color: '#1e293b',
+        marginBottom: 8,
     },
     bottomRow: {
         flexDirection: 'row',
