@@ -24,6 +24,7 @@ import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../store';
 import { logout } from '../store/slices/userSlice';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { socketService } from '../services/socketService';
 import {
     useGetUserProfileQuery,
     useUpdateUserProfileMutation,
@@ -71,6 +72,8 @@ export function ProfileScreen({ navigation }: { navigation?: any }) {
 
     const handleLogout = async () => {
         try {
+            // Disconnect socket first so the server marks the user as offline
+            socketService.disconnect();
             await AsyncStorage.removeItem('token');
             await AsyncStorage.removeItem('user');
             dispatch(logout());

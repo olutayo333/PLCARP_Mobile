@@ -179,6 +179,7 @@ export interface CommunityAnalytics {
   myJoinedCommunities: number;
   totalMembers: number;
   totalTopics: number;
+  onlineUsers: number;
   myTopicsCount: number;
   myRepliesPosted: number;
   myRepliesReceived: number;

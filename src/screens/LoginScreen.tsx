@@ -7,6 +7,7 @@ import { useDispatch } from 'react-redux';
 import { setUser } from '../store/slices/userSlice';
 import { showToast } from '../store/slices/uiSlice';
 import CustomAlert from '../utils/CustomAlert';
+import { socketService } from '../services/socketService';
 
 const Alert = CustomAlert;
 
@@ -33,7 +34,7 @@ export function LoginScreen({ onLoginSuccess, onRegisterPress, onVisitorPress, o
 
   const handleLogin = async () => {
     if (!email || !password) {
-      showConfirm({ title: 'Error', message: 'Please fill in all fields', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
+      showConfirm({ title: 'Error', message: 'Please fill in all fields', confirmText: 'OK', hideCancel: true, onConfirm: () => { } });
       return;
     }
     try {
@@ -41,21 +42,23 @@ export function LoginScreen({ onLoginSuccess, onRegisterPress, onVisitorPress, o
       if (result.status && (result.token || result.data?.token)) {
         const token = result.token || result.data?.token;
         const user = result.user || result.data?.user;
-        
+
         await AsyncStorage.setItem('token', token);
         if (user) {
           await AsyncStorage.setItem('user', JSON.stringify(user));
           dispatch(setUser(user));
         }
+        // Connect socket immediately so the server marks this user as globally online
+        socketService.connect(token);
         dispatch(showToast({ message: 'Login successful! Welcome back.', type: 'success' }));
         onLoginSuccess();
       } else {
         const errorMsg = result?.message || result?.data?.message || 'Invalid login response';
-        showConfirm({ title: 'Login Error', message: errorMsg, confirmText: 'Retry', hideCancel: true, onConfirm: () => {} });
+        showConfirm({ title: 'Login Error', message: errorMsg, confirmText: 'Retry', hideCancel: true, onConfirm: () => { } });
       }
     } catch (error: any) {
       const serverMsg = error.data?.message || error.message || 'Something went wrong';
-      showConfirm({ title: 'Login Failed', message: serverMsg, confirmText: 'Try Again', hideCancel: true, onConfirm: () => {} });
+      showConfirm({ title: 'Login Failed', message: serverMsg, confirmText: 'Try Again', hideCancel: true, onConfirm: () => { } });
     }
   };
 

@@ -428,7 +428,11 @@ export function FeedScreen({ route }: any) {
                         </View>
                         <View style={styles.analyticsColumn}>
                             <Text style={styles.analyticsVal}>
-                                {realtimeOnlineCount !== null ? realtimeOnlineCount : (selectedCommunityId ? (communityAnalytics?.onlineMembers || 0) : 0)}
+                                {realtimeOnlineCount !== null
+                                    ? realtimeOnlineCount
+                                    : selectedCommunityId
+                                        ? (communityAnalytics?.onlineMembers || 0)
+                                        : (generalAnalytics?.onlineUsers || 0)}
                             </Text>
                             <Text style={styles.analyticsLab}>ONLINE</Text>
                         </View>
