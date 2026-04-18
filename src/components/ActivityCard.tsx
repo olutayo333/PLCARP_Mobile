@@ -31,7 +31,7 @@ const styles = StyleSheet.create({
     activityCard: {
         backgroundColor: '#fff',
         padding: 10,
-        marginHorizontal: 16,
+        marginHorizontal: 0,
         marginVertical: 8,
         borderRadius: 16,
         borderWidth: 1,

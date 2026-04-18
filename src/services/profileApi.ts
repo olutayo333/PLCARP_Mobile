@@ -257,6 +257,8 @@ export const {
  *  @param formData  FormData with key "file" → File
  */
 export const uploadAvatarApi = async (formData: FormData) => {
+    // Do NOT set Content-Type manually — React Native sets multipart/form-data
+    // with the correct boundary automatically via OkHttp.
     const response = await axiosInstance.post('/users/profile/avatar', formData);
     return response;
 };
@@ -267,6 +269,8 @@ export const uploadAvatarApi = async (formData: FormData) => {
  *  @param formData  FormData with key "logo" → File
  */
 export const uploadOrgLogoApi = async (formData: FormData) => {
+    // Do NOT set Content-Type manually — React Native sets multipart/form-data
+    // with the correct boundary automatically via OkHttp.
     const response = await axiosInstance.post('/users/profile/organization/logo', formData);
     return response;
 };

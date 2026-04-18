@@ -161,8 +161,9 @@ const styles = StyleSheet.create({
   container: {
     backgroundColor: '#fff',
     padding: 16,
-    marginHorizontal: 16,
+    marginHorizontal: 0,
     marginVertical: 0,
+    marginTop: 0.1,
     borderWidth: 1,
     borderColor: '#cbd5e1',
   },
@@ -170,6 +171,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 12,
+   
   },
   authorSection: {
     flexDirection: 'row',

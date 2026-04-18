@@ -1008,7 +1008,6 @@ const styles = StyleSheet.create({
     headerTopRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'space-between',
         paddingHorizontal: 2,
         marginBottom: 16,
     },
@@ -1069,12 +1068,13 @@ const styles = StyleSheet.create({
         letterSpacing: 0.5,
     },
     subTabs: {
-        backgroundColor: '#fff',
+        backgroundColor: '#f1f5f9',
         borderBottomWidth: 1,
-        borderBottomColor: '#f3f4f6',
+        borderBottomColor: '#e2e8f0',
+        marginBottom: 12,
     },
     subTabsContent: {
-        paddingHorizontal: 8,
+        paddingHorizontal: 4,
     },
     subTab: {
         paddingHorizontal: 12,
@@ -1402,7 +1402,8 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
     },
     searchContainer: {
-        padding: 16,
+        paddingVertical: 16,
+        paddingHorizontal: 0,
         backgroundColor: '#f1f5f9',
         borderBottomWidth: 1,
         borderBottomColor: '#f1f5f9',
@@ -1426,7 +1427,7 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'center',
         paddingVertical: 24,
-        paddingHorizontal: 16,
+        paddingHorizontal: 0,
         marginBottom: 40,
     },
     paginationButton: {
@@ -1502,7 +1503,8 @@ const styles = StyleSheet.create({
         borderRadius: 16,
         marginBottom: 12,
         borderWidth: 1,
-        borderColor: '#f1f5f9'
+        borderColor: '#f1f5f9',
+        marginHorizontal: 0,
     },
     communitySkeletonCard: {
         backgroundColor: '#fff',
@@ -1512,7 +1514,8 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: '#f1f5f9',
         flexDirection: 'row',
-        alignItems: 'center'
+        alignItems: 'center',
+        marginHorizontal: 0,
     },
     // Modal Styles
     modalOverlay: {
@@ -1579,7 +1582,7 @@ const styles = StyleSheet.create({
     },
     communitySelectorContainer: {
         backgroundColor: '#f1f5f9',
-        paddingHorizontal: 16,
+        paddingHorizontal: 0,
         paddingVertical: 12,
         borderBottomWidth: 1,
         borderBottomColor: '#f1f5f9',
@@ -1686,7 +1689,7 @@ const styles = StyleSheet.create({
     activityItem: {
         flexDirection: 'column',
         backgroundColor: '#fff',
-        marginHorizontal: 16,
+        marginHorizontal: 0,
         marginVertical: 8,
         borderRadius: 16,
         borderWidth: 1,
