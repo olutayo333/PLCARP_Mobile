@@ -183,6 +183,7 @@ export interface CommunityAnalytics {
   myTopicsCount: number;
   myRepliesPosted: number;
   myRepliesReceived: number;
+  myLikes: number;
 }
 
 export interface CommunityActivityFeedItem {

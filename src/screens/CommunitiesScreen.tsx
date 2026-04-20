@@ -177,10 +177,12 @@ export function CommunitiesScreen() {
             <FlatList
                 ref={flatListRef}
                 data={communities}
-                renderItem={({ item }) => (
+                renderItem={({ item, index }) => (
                     <CommunityCard
                         community={item}
                         isLoggedIn={isLoggedIn}
+                        isFirst={index === 0}
+                        isLast={index === communities.length - 1}
                         onPress={() => navigation.navigate('CommunityDetail', { communityId: item.id })}
                         onSubscribe={() => handleCommunityAction(item)}
                         isJoined={activeFilter === 'subscribed' || !!item.joined || !!item.isJoined || !!item.isSubscribed}

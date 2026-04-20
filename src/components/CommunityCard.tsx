@@ -2,6 +2,8 @@ import React from 'react';
 import { StyleSheet, View, Text, TouchableOpacity } from 'react-native';
 import { Users, Check, Plus, List } from 'lucide-react-native';
 
+//"https://plrcap-backend.ambitiousground-313553a9.westeurope.azurecontainerapps.io/api/v1"
+
 export function CommunityCard({
     community,
     isLoggedIn,

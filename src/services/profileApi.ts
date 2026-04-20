@@ -1,7 +1,11 @@
 import { REQUEST_METHODS } from '../constants/reqMethods';
 import { apiSlice } from './apiSlice';
 import axiosInstance from './axiosClient';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { HttpSuccessResponse } from '../types/api';
+
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://plrcap-backend.ambitiousground-313553a9.westeurope.azurecontainerapps.io/api/v1'
+//'https://pluralcode-api.onrender.com/api/v1';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -257,10 +261,21 @@ export const {
  *  @param formData  FormData with key "file" → File
  */
 export const uploadAvatarApi = async (formData: FormData) => {
-    // Do NOT set Content-Type manually — React Native sets multipart/form-data
-    // with the correct boundary automatically via OkHttp.
-    const response = await axiosInstance.post('/users/profile/avatar', formData);
-    return response;
+    // Use native fetch (NOT axios) for FormData uploads.
+    // Axios sets Content-Type: application/x-www-form-urlencoded by default on
+    // React Native, which crashes the native OkHttp multipart body builder.
+    // Native fetch automatically sets: multipart/form-data; boundary=xxxx
+    const token = await AsyncStorage.getItem('token');
+    const response = await fetch(`${BASE_URL}/users/profile/avatar`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+    });
+    if (!response.ok) {
+        const error = await response.json().catch(() => ({ message: 'Upload failed' }));
+        throw { response: { data: error } };
+    }
+    return response.json();
 };
 
 /** POST /users/profile/organization/logo
@@ -269,8 +284,16 @@ export const uploadAvatarApi = async (formData: FormData) => {
  *  @param formData  FormData with key "logo" → File
  */
 export const uploadOrgLogoApi = async (formData: FormData) => {
-    // Do NOT set Content-Type manually — React Native sets multipart/form-data
-    // with the correct boundary automatically via OkHttp.
-    const response = await axiosInstance.post('/users/profile/organization/logo', formData);
-    return response;
+    // Use native fetch (NOT axios) for FormData uploads. Same reason as above.
+    const token = await AsyncStorage.getItem('token');
+    const response = await fetch(`${BASE_URL}/users/profile/organization/logo`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+    });
+    if (!response.ok) {
+        const error = await response.json().catch(() => ({ message: 'Upload failed' }));
+        throw { response: { data: error } };
+    }
+    return response.json();
 };

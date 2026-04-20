@@ -314,7 +314,7 @@ export function ProfileScreen({ navigation }: { navigation?: any }) {
                         <StatItem label="Topics started" value={generalAnalytics?.myTopicsCount || 0} />
                         <StatItem label="Replies posted" value={generalAnalytics?.myRepliesPosted || 0} />
                         <StatItem label="Replies received" value={generalAnalytics?.myRepliesReceived || 0} />
-                        <StatItem label="Likes received" value={profile?.likesReceived || 0} />
+                        <StatItem label="Likes received" value={generalAnalytics?.myLikes || 0} />
                     </View>
                 </View>
 

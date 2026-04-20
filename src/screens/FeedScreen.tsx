@@ -1847,5 +1847,7 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         color: '#374151',
     },
-});
 
+
+
+});

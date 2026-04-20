@@ -2,7 +2,8 @@ import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Replace with your actual API base URL
-const BASE_URL = 'https://pluralcode-api.onrender.com/api/v1';
+const BASE_URL = 'https://plrcap-backend.ambitiousground-313553a9.westeurope.azurecontainerapps.io/api/v1'
+//'https://pluralcode-api.onrender.com/api/v1';
 
 export const api = createApi({
   reducerPath: 'api',
