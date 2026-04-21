@@ -252,8 +252,8 @@ export function SearchScreen() {
                                     <TopicCard
                                         key={topic.id}
                                         topic={topic}
-                                        readOnly={!isLoggedIn}
-                                        onTopicPress={(id) => navigation.navigate('TopicDetail', { communityId: topic.communityId, topicId: id })}
+                                        isLoggedIn={isLoggedIn}
+                                        onPress={() => navigation.navigate('TopicDetail', { communityId: topic.communityId, topicId: topic.id })}
                                     />
                                 ))}
                             </View>
