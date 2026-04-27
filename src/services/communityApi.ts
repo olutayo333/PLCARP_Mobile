@@ -95,6 +95,7 @@ export interface CommunityTopicDetail {
   author: TopicAuthor;
   comments: TopicComment[];
   hasLiked?: boolean;
+  viewCount?: number;
   createdAt: string;
   updatedAt: string;
 }

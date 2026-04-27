@@ -3,7 +3,7 @@ import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, Activi
 import { useRoute, RouteProp } from '@react-navigation/native';
 import { RootStackParamList } from '../navigation/types';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { X, ChevronDown } from 'lucide-react-native';
+import { X, ChevronDown, Search } from 'lucide-react-native';
 import { useGetCommunitiesQuery, useCreateCommunityTopicMutation, useSearchCommunityMembersQuery, CommunitySearchResult } from '../services/communityApi';
 
 interface CreatePostProps {
@@ -34,7 +34,19 @@ export function CreatePost({ onCancel, onSuccess }: CreatePostProps) {
     return () => clearTimeout(timer);
   }, [mentionQuery]);
 
-  const { data: communitiesData, isLoading: loadingCommunities } = useGetCommunitiesQuery({});
+  const [communitySearchQuery, setCommunitySearchQuery] = useState('');
+  const [debouncedCommunityQuery, setDebouncedCommunityQuery] = useState('');
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedCommunityQuery(communitySearchQuery);
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [communitySearchQuery]);
+
+  const { data: communitiesData, isLoading: loadingCommunities } = useGetCommunitiesQuery({
+    search: debouncedCommunityQuery
+  });
 
   // Effect to handle pre-selection of community
   useEffect(() => {
@@ -125,6 +137,16 @@ export function CreatePost({ onCancel, onSuccess }: CreatePostProps) {
           <Text style={styles.headerTitle}>Select Community</Text>
           <View style={{ width: 24 }} />
         </View>
+        <View style={styles.searchContainer}>
+          <Search size={20} color="#9ca3af" />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search communities..."
+            placeholderTextColor="#9ca3af"
+            value={communitySearchQuery}
+            onChangeText={setCommunitySearchQuery}
+          />
+        </View>
         <FlatList
           data={communitiesData?.communities || []}
           keyExtractor={(item) => item.id}
@@ -154,6 +176,13 @@ export function CreatePost({ onCancel, onSuccess }: CreatePostProps) {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <View style={{ flex: 1, paddingTop: insets.top, paddingBottom: insets.bottom }}>
+        <TouchableOpacity
+          style={styles.dragHandleWrapper}
+          onPress={onCancel}
+          activeOpacity={0.7}
+        >
+          <View style={styles.dragHandle} />
+        </TouchableOpacity>
         <View style={styles.header}>
           <TouchableOpacity onPress={onCancel}>
             <X size={24} color="#374151" />
@@ -275,6 +304,18 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f8fafc',
   },
+  dragHandle: {
+    width: 40,
+    height: 4,
+    backgroundColor: '#e5e7eb',
+    borderRadius: 2,
+    alignSelf: 'center',
+  },
+  dragHandleWrapper: {
+    alignSelf: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -287,6 +328,26 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     color: '#1e293b',
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    margin: 16,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  searchInput: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    fontSize: 16,
+    color: '#1e293b',
+    ...Platform.select({
+      web: { outlineStyle: 'none' } as any,
+    }),
   },
   content: {
     flex: 1,

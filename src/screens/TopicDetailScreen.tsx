@@ -734,7 +734,13 @@ export function TopicDetailScreen({ communityId, topicId, quoteCommentId, replyC
                 style={styles.inputModalOverlay}
             >
                 <View style={styles.inputModalContent}>
-
+                    <TouchableOpacity
+                        style={styles.inputHandleWrapper}
+                        onPress={() => setIsCommentModalVisible(false)}
+                        activeOpacity={0.7}
+                    >
+                        <View style={styles.inputHandle} />
+                    </TouchableOpacity>
                     <View style={styles.inputModalHeader}>
                         {(replyToComment || quotedComment) ? (
                             <TouchableOpacity
@@ -868,7 +874,7 @@ export function TopicDetailScreen({ communityId, topicId, quoteCommentId, replyC
                                         <Text style={styles.statTextMini}>{topic.comments.length} replies</Text>
                                     </View>
                                     <View style={styles.statItemMini}>
-                                        <Text style={styles.statTextMini}>👁 124 views</Text>
+                                        <Text style={styles.statTextMini}>👁 {topic.viewCount || 0} views</Text>
                                     </View>
                                 </View>
 
@@ -1496,7 +1502,12 @@ const styles = StyleSheet.create({
         backgroundColor: '#e5e7eb',
         borderRadius: 2,
         alignSelf: 'center',
-        marginBottom: 12,
+    },
+    inputHandleWrapper: {
+        alignSelf: 'center',
+        paddingVertical: 12,
+        paddingHorizontal: 24,
+        marginBottom: 4,
     },
     inputModalHeader: {
         flexDirection: 'row',

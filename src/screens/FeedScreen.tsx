@@ -458,7 +458,7 @@ export function FeedScreen({ route }: any) {
             )}
 
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.subTabs} contentContainerStyle={styles.subTabsContent}>
-                {['Topics', 'Activities', 'Communities', 'Mentions'].map((tab) => {
+                {['Topics', 'Communities', 'Activities', 'Mentions'].map((tab) => {
                     const tabKey = tab.toLowerCase();
                     if (!isLoggedIn && (tabKey === 'mentions' || tabKey === 'activities')) return null;
                     return (
