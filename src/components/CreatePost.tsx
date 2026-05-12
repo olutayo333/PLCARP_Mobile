@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, FlatList, Platform, Modal, KeyboardAvoidingView, Image } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, FlatList, Platform, Modal, KeyboardAvoidingView, Image, PanResponder, Animated, Dimensions } from 'react-native';
 import { useRoute, RouteProp } from '@react-navigation/native';
 import { RootStackParamList } from '../navigation/types';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -71,6 +71,57 @@ export function CreatePost({ onCancel, onSuccess }: CreatePostProps) {
 
   const showConfirm = (cfg: ConfirmConfig) => setConfirmModal(cfg);
   const dismissConfirm = () => setConfirmModal(null);
+
+  // ── Drag-to-close (must live before any early return) ────────────────────────
+  const SCREEN_HEIGHT = Dimensions.get('window').height;
+  const CLOSE_THRESHOLD = 150; // px dragged down to trigger close
+  const VELOCITY_THRESHOLD = 0.5; // downward velocity to trigger close
+
+  const translateY = useRef(new Animated.Value(0)).current;
+
+  const panResponder = useRef(
+    PanResponder.create({
+      // Capture touch immediately on the handle
+      onStartShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponderCapture: () => true,
+      // Also capture during move so we beat ScrollView / navigation gestures
+      onMoveShouldSetPanResponder: (_, gs) => gs.dy > 2,
+      onMoveShouldSetPanResponderCapture: (_, gs) => gs.dy > 2,
+      onPanResponderMove: (_, gestureState) => {
+        if (gestureState.dy > 0) {
+          translateY.setValue(gestureState.dy);
+        }
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        const shouldClose =
+          gestureState.dy > CLOSE_THRESHOLD ||
+          gestureState.vy > VELOCITY_THRESHOLD;
+
+        if (shouldClose) {
+          Animated.timing(translateY, {
+            toValue: SCREEN_HEIGHT,
+            duration: 250,
+            useNativeDriver: true,
+          }).start(() => onCancel());
+        } else {
+          Animated.spring(translateY, {
+            toValue: 0,
+            useNativeDriver: true,
+            bounciness: 6,
+          }).start();
+        }
+      },
+      onPanResponderTerminate: () => {
+        // If gesture is stolen, snap back
+        Animated.spring(translateY, {
+          toValue: 0,
+          useNativeDriver: true,
+          bounciness: 6,
+        }).start();
+      },
+    })
+  ).current;
+  // ─────────────────────────────────────────────────────────────────────────────
 
   const handleInputChange = (text: string) => {
     setBody(text);
@@ -175,14 +226,14 @@ export function CreatePost({ onCancel, onSuccess }: CreatePostProps) {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <View style={{ flex: 1, paddingTop: insets.top, paddingBottom: insets.bottom }}>
-        <TouchableOpacity
+      <Animated.View style={[{ flex: 1, paddingTop: insets.top, paddingBottom: insets.bottom }, { transform: [{ translateY }] }]}>
+        {/* Drag handle — drag down to dismiss, tap does nothing */}
+        <View
           style={styles.dragHandleWrapper}
-          onPress={onCancel}
-          activeOpacity={0.7}
+          {...panResponder.panHandlers}
         >
           <View style={styles.dragHandle} />
-        </TouchableOpacity>
+        </View>
         <View style={styles.header}>
           <TouchableOpacity onPress={onCancel}>
             <X size={24} color="#374151" />
@@ -294,7 +345,7 @@ export function CreatePost({ onCancel, onSuccess }: CreatePostProps) {
             </View>
           </View>
         </Modal>
-      </View>
+      </Animated.View>
     </KeyboardAvoidingView>
   );
 }
@@ -312,9 +363,13 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   dragHandleWrapper: {
-    alignSelf: 'center',
-    paddingVertical: 12,
+    alignSelf: 'stretch',        // full width for easier touch targeting
+    alignItems: 'center',
+    paddingVertical: 16,         // bigger hit area
     paddingHorizontal: 24,
+    ...Platform.select({
+      web: { cursor: 'grab' } as any,
+    }),
   },
   header: {
     flexDirection: 'row',

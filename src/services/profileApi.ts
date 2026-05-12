@@ -226,7 +226,7 @@ export const profileApiSlice = apiSlice.injectEndpoints({
          */
         deleteAccount: builder.mutation<{ status: boolean; message: string }, void>({
             query: () => ({
-                url: `/users/profile`,
+                url: `/users/delete`,
                 method: REQUEST_METHODS.DELETE,
             }),
             invalidatesTags: ['UserProfile'],
