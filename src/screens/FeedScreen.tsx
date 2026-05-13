@@ -111,6 +111,7 @@ export function FeedScreen({ route }: any) {
     const dispatch = useDispatch();
     const isLoggedIn = useSelector((state: RootState) => state.user.isLoggedIn);
     const user = useSelector((state: RootState) => state.user.user);
+    const blockedUserIds = useSelector((state: RootState) => state.safety.blockedUserIds);
 
     // Cross-platform modal state
     type ConfirmConfig = { title: string; message: string; confirmText: string; danger?: boolean; onConfirm: () => void };
@@ -379,7 +380,7 @@ export function FeedScreen({ route }: any) {
     const topics = [
         ...realtimeTopics,
         ...(topicsData?.topics || [])
-    ];
+    ].filter(t => !blockedUserIds.includes(t.author.id));
     const refetch = () => {
         if (activeSubTab === 'communities') {
             return communityFilter === 'subscribed' ? refetchSubscriptions() : refetchCommunitiesList();
@@ -661,7 +662,7 @@ export function FeedScreen({ route }: any) {
                         ? (topics || [])
                         : activeSubTab === 'communities' ? (communityFilter === 'subscribed' ? (subscriptions?.map(c => ({ ...c, joined: true })) || []) : (communitiesListData?.communities || []))
                             : activeSubTab === 'mentions' ? (mentions || [])
-                                : activeSubTab === 'activities' ? (activityFeedData || [])
+                                : activeSubTab === 'activities' ? (activityFeedData?.filter(a => !blockedUserIds.includes(a.author.id)) || [])
                                     : []
                     )
                 }

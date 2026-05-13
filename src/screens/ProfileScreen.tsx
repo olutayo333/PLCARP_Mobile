@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 
 import CustomAlert from '../utils/CustomAlert';
 const Alert = CustomAlert;
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView, TextInput, Modal, ActivityIndicator, Image, Platform, StatusBar } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView, TextInput, Modal, ActivityIndicator, Image, Platform, StatusBar, Linking } from 'react-native';
 import {
     User,
     Building2,
@@ -401,6 +401,13 @@ export function ProfileScreen({ navigation }: { navigation?: any }) {
                         />
                         <View style={styles.menuDivider} />
                         <MenuItem
+                            icon={Shield}
+                            label="Privacy Policy"
+                            subLabel="How we handle your data"
+                            onPress={() => Linking.openURL('https://ngosupporthub.ng/privacy-policy')}
+                        />
+                        <View style={styles.menuDivider} />
+                        <MenuItem
                             icon={LogOut}
                             label="Log out"
                             isLogout
@@ -546,12 +553,26 @@ function EditProfileScreen({ onBack }: { onBack: () => void }) {
 
     const handleEditAvatar = async () => {
         try {
-            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-            if (status !== 'granted') {
-                showConfirm({ title: 'Permission Denied', message: 'We need camera roll permissions to change your avatar.', confirmText: 'OK', hideCancel: true, onConfirm: () => { } });
-                return;
-            }
+            showConfirm({
+                title: 'Access Photos',
+                message: 'PLRCAP requires access to your photo library to let you select and upload a profile picture. We only access images you explicitly select.',
+                confirmText: 'Continue',
+                onConfirm: async () => {
+                    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+                    if (status !== 'granted') {
+                        showConfirm({ title: 'Permission Denied', message: 'We need camera roll permissions to change your avatar.', confirmText: 'OK', hideCancel: true, onConfirm: () => { } });
+                        return;
+                    }
+                    proceedWithAvatarSelection();
+                }
+            });
+        } catch (e) {
+            showConfirm({ title: 'Unavailable', message: 'Image picker is not available on this device.', confirmText: 'OK', hideCancel: true, onConfirm: () => { } });
+        }
+    };
 
+    const proceedWithAvatarSelection = async () => {
+        try {
             const result = await ImagePicker.launchImageLibraryAsync({
                 mediaTypes: ImagePicker.MediaTypeOptions.Images,
                 allowsEditing: true,
@@ -796,12 +817,26 @@ function OrgProfileScreen({ onBack }: { onBack: () => void }) {
 
     const handleEditLogo = async () => {
         try {
-            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-            if (status !== 'granted') {
-                showConfirm({ title: 'Permission Required', message: 'We need camera roll permissions to change your logo.', confirmText: 'OK', hideCancel: true, onConfirm: () => { } });
-                return;
-            }
+            showConfirm({
+                title: 'Access Photos',
+                message: 'PLRCAP requires access to your photo library to let you select and upload an organizational logo. We only access images you explicitly select.',
+                confirmText: 'Continue',
+                onConfirm: async () => {
+                    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+                    if (status !== 'granted') {
+                        showConfirm({ title: 'Permission Denied', message: 'We need camera roll permissions to change your organizational logo.', confirmText: 'OK', hideCancel: true, onConfirm: () => { } });
+                        return;
+                    }
+                    proceedWithLogoSelection();
+                }
+            });
+        } catch (e) {
+            showConfirm({ title: 'Unavailable', message: 'Image picker is not available on this device.', confirmText: 'OK', hideCancel: true, onConfirm: () => { } });
+        }
+    };
 
+    const proceedWithLogoSelection = async () => {
+        try {
             const result = await ImagePicker.launchImageLibraryAsync({
                 mediaTypes: ImagePicker.MediaTypeOptions.Images,
                 allowsEditing: true,

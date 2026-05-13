@@ -5,9 +5,12 @@ import { X, Check } from 'lucide-react-native';
 const REPORT_REASONS = [
     'Harassment or bullying',
     'Hate speech or discrimination',
+    'Sexual Content or Nudity',
+    'Violence or Dangerous content',
+    'Child Safety concerns',
+    'Self-harm or Eating disorders',
     'Spam or Advertising',
-    'Misinformation or false information',
-    'Impersonation or fake identity',
+    'Misinformation',
     'Other'
 ];
 

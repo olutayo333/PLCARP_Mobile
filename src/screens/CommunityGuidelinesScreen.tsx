@@ -42,28 +42,34 @@ export function CommunityGuidelinesScreen({ navigation }: { navigation: any }) {
                 </View>
 
                 <View style={styles.guidelineList}>
-                    <GuidelineSection 
+                    <GuidelineSection
                         icon={Users}
                         title="Be Respectful"
                         content="Engage with others professionally. We have zero tolerance for hate speech, harassment, or personal attacks."
                     />
-                    
-                    <GuidelineSection 
+
+                    <GuidelineSection
                         icon={Shield}
                         title="Protect Privacy"
                         content="Do not share personal information of others. Respect confidentiality and maintain the trust of the hub."
                     />
-                    
-                    <GuidelineSection 
+
+                    <GuidelineSection
                         icon={MessageSquare}
                         title="Stay Relevant"
                         content="Keep discussions focused on the community's objective. Off-topic posts or spam will be removed."
                     />
-                    
-                    <GuidelineSection 
+
+                    <GuidelineSection
+                        icon={Shield}
+                        title="Child Safety"
+                        content="We have absolute zero tolerance for any content that facilitates child sexual abuse or exploitation (CSAE). We will remove such content immediately and report it to the relevant authorities."
+                    />
+
+                    <GuidelineSection
                         icon={AlertTriangle}
-                        title="Safety First"
-                        content="Do not promote illegal activities or share dangerous content. Report any suspicious behavior to our moderation team."
+                        title="Safety & Restricted Content"
+                        content="Do not promote illegal activities, excessive violence, or share dangerous content. Sexual content, nudity, and promotion of tobacco/nicotine are strictly prohibited."
                     />
                 </View>
 

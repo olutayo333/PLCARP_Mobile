@@ -24,6 +24,7 @@ import {
     ChevronUp,
     ChevronDown,
     Edit2,
+    UserMinus,
 } from 'lucide-react-native';
 import {
     useGetTopicByIdQuery,
@@ -40,6 +41,7 @@ import {
 } from '../services/communityApi';
 import { useDispatch, useSelector } from 'react-redux';
 import { showToast } from '../store/slices/uiSlice';
+import { blockUser } from '../store/slices/safetySlice';
 import { Skeleton } from '../components/common/Skeleton';
 import { ReportModal } from '../components/ReportModal';
 
@@ -58,6 +60,7 @@ export function TopicDetailScreen({ communityId, topicId, quoteCommentId, replyC
     const isLoggedIn = useSelector((state: RootState) => state.user.isLoggedIn);
     const insets = useSafeAreaInsets();
     const user = useSelector((state: RootState) => state.user.user);
+    const blockedUserIds = useSelector((state: RootState) => state.safety.blockedUserIds);
     const { data: topic, isLoading } = useGetTopicByIdQuery({ communityId, topicId });
     const { data: mentions } = useGetMentionsQuery(undefined, { skip: !isLoggedIn });
 
@@ -304,6 +307,34 @@ export function TopicDetailScreen({ communityId, topicId, quoteCommentId, replyC
         setIsReportModalVisible(true);
     };
 
+    const handleBlockUser = (authorId: string, authorName: string) => {
+        if (!isLoggedIn) {
+            handleGuestAction('block users');
+            return;
+        }
+        if (authorId === user?.id) return;
+
+        Alert.alert(
+            'Block User',
+            `Are you sure you want to block ${authorName}? You will no longer see their posts or comments.`,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Block',
+                    style: 'destructive',
+                    onPress: () => {
+                        dispatch(blockUser(authorId));
+                        dispatch(showToast({ message: `${authorName} has been blocked`, type: 'success' }));
+                        // If blocking the topic author, go back
+                        if (authorId === topic?.author?.id) {
+                            onBack();
+                        }
+                    }
+                }
+            ]
+        );
+    };
+
     const submitReport = async (reason: string) => {
         setIsReporting(true);
         try {
@@ -500,6 +531,8 @@ export function TopicDetailScreen({ communityId, topicId, quoteCommentId, replyC
     };
 
     const renderComment = (comment: any, depth = 0, parent: any = null) => {
+        if (blockedUserIds.includes(comment.author.id)) return null;
+
         const isMentioned = user && (
             comment.mentionedUserId === user.id ||
             comment.mentionedUserIds?.includes(user.id) ||
@@ -604,6 +637,15 @@ export function TopicDetailScreen({ communityId, topicId, quoteCommentId, replyC
                                 <Flag size={14} color="#6b7280" />
                                 <Text style={styles.commentActionText}>Report</Text>
                             </TouchableOpacity>
+                            {comment.author.id !== user?.id && (
+                                <TouchableOpacity
+                                    style={styles.commentAction}
+                                    onPress={() => handleBlockUser(comment.author.id, comment.author.fullName)}
+                                >
+                                    <UserMinus size={14} color="#6b7280" />
+                                    <Text style={styles.commentActionText}>Block</Text>
+                                </TouchableOpacity>
+                            )}
                         </View>
                     ) : (
                         <Text style={styles.commentLikeCountGuest}>{comment.likeCount > 0 ? `♡ ${comment.likeCount}` : ''}</Text>

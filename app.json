@@ -35,9 +35,9 @@
       "package": "com.sevenstar.plcap",
       "versionCode": 3,
       "largeHeap": true,
-      "permissions": [
-        "android.permission.RECORD_AUDIO"
-      ]
+      "compileSdkVersion": 36,
+      "targetSdkVersion": 36,
+      "permissions": []
     },
     "web": {
       "favicon": "./assets/logo1.png"

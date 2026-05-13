@@ -21,6 +21,7 @@ export function CreatePost({ onCancel, onSuccess }: CreatePostProps) {
   const insets = useSafeAreaInsets();
   const [showCommunityPicker, setShowCommunityPicker] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
 
   // Mention States
   const [mentionQuery, setMentionQuery] = useState('');
@@ -149,6 +150,10 @@ export function CreatePost({ onCancel, onSuccess }: CreatePostProps) {
     }
     if (!title.trim() || !body.trim()) {
       showConfirm({ title: 'Error', message: 'Please fill in title and body', confirmText: 'OK', hideCancel: true, onConfirm: () => { } });
+      return;
+    }
+    if (!termsAccepted) {
+      showConfirm({ title: 'Accept Terms', message: 'You must agree to the Community Guidelines before posting.', confirmText: 'OK', hideCancel: true, onConfirm: () => { } });
       return;
     }
     setUploading(true);
@@ -297,6 +302,19 @@ export function CreatePost({ onCancel, onSuccess }: CreatePostProps) {
             </View>
           </View>
 
+          <TouchableOpacity
+            style={styles.termsContainer}
+            onPress={() => setTermsAccepted(!termsAccepted)}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.checkbox, termsAccepted && styles.checkboxChecked]}>
+              {termsAccepted && <View style={styles.checkboxInner} />}
+            </View>
+            <Text style={styles.termsText}>
+              I agree to the <Text style={styles.termsLink}>Community Guidelines</Text> and zero-tolerance policy against objectionable content.
+            </Text>
+          </TouchableOpacity>
+
           <View style={styles.actions}>
             <TouchableOpacity style={styles.cancelButton} onPress={onCancel}>
               <Text style={styles.cancelButtonText}>Cancel</Text>
@@ -346,7 +364,7 @@ export function CreatePost({ onCancel, onSuccess }: CreatePostProps) {
           </View>
         </Modal>
       </Animated.View>
-    </KeyboardAvoidingView>
+    </KeyboardAvoidingView >
   );
 }
 
@@ -642,5 +660,46 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     color: '#fff',
+  },
+  termsContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginTop: 20,
+    backgroundColor: '#fff',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: '#0e7490',
+    marginRight: 12,
+    marginTop: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxChecked: {
+    backgroundColor: '#0e7490',
+  },
+  checkboxInner: {
+    width: 10,
+    height: 10,
+    borderRadius: 2,
+    backgroundColor: '#fff',
+  },
+  termsText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#475569',
+    lineHeight: 18,
+  },
+  termsLink: {
+    color: '#0e7490',
+    fontWeight: '700',
+    textDecorationLine: 'underline',
   },
 });

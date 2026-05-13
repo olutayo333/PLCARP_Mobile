@@ -3,8 +3,9 @@ import { View, Text, ActivityIndicator, TouchableOpacity, StyleSheet } from 'rea
 import { Provider, useSelector, useDispatch } from 'react-redux';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { store } from './store';
+import { store, AppDispatch } from './store';
 import { setUser } from './store/slices/userSlice';
+import { loadBlockedUsers } from './store/slices/safetySlice';
 import { RootState } from './store';
 import { GlobalToast } from './components/GlobalToast';
 import { GlobalAlert } from './components/GlobalAlert';
@@ -66,7 +67,7 @@ class ErrorBoundary extends React.Component<
 }
 
 function AppContent() {
-  const dispatch = useDispatch();
+  const dispatch = useDispatch<AppDispatch>();
   const [ready, setReady] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
 
@@ -80,6 +81,7 @@ function AppContent() {
           dispatch(setUser(JSON.parse(userJson)));
           socketService.connect(token);
         }
+        dispatch(loadBlockedUsers());
         setShowOnboarding(!token && !onboarded);
       } catch (e) {
         console.error('Auth check failed', e);
