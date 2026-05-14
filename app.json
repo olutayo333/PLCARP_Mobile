@@ -33,7 +33,7 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.sevenstar.plcap",
-      "versionCode": 3,
+      "versionCode": 8,
       "largeHeap": true,
       "compileSdkVersion": 36,
       "targetSdkVersion": 36,
