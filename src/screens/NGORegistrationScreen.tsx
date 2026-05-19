@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, Modal, FlatList } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowLeft, ArrowRight, Eye, EyeOff, ChevronDown, Check, X } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSignupMutation } from '../services/authApi';
 import { NIGERIA_STATES_LGAS } from '../constants/statesAndLgas';
 import CustomAlert from '../utils/CustomAlert';
@@ -143,13 +144,11 @@ export function NGORegistrationScreen({ onBack, onComplete }: {
     try {
       const response = await registerApi(payload).unwrap() as any;
       if (response.status) {
-        showConfirm({
-          title: 'Success',
-          message: response.message || 'Registration successful! Please verify your email.',
-          confirmText: 'Done',
-          hideCancel: true,
-          onConfirm: () => onComplete()
-        });
+        // Save credentials for the verification screen
+        await AsyncStorage.setItem('verificationEmail', email);
+        await AsyncStorage.setItem('verificationPassword', password);
+        // Immediately navigate to email verification
+        onComplete();
       } else {
         showConfirm({ title: 'Error', message: response.message || 'Registration failed', confirmText: 'OK', hideCancel: true, onConfirm: () => { } });
       }

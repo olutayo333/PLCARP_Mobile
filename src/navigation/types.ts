@@ -9,6 +9,7 @@ export type RootStackParamList = {
     ExpertRegistration: undefined;
     NGORegistration: undefined;
     RegistrationComplete: undefined;
+    VerifyEmail: undefined;
     ForgotPassword: undefined;
     CommunityDetail: { communityId: string };
 };

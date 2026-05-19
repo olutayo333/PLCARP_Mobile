@@ -15,6 +15,7 @@ import { ExpertRegistrationScreen } from '../screens/ExpertRegistrationScreen';
 import { NGORegistrationScreen } from '../screens/NGORegistrationScreen';
 import { RegistrationCompleteScreen } from '../screens/RegistrationCompleteScreen';
 import { ForgotPasswordScreen } from '../screens/ForgotPasswordScreen';
+import { VerifyEmailScreen } from '../screens/VerifyEmailScreen';
 
 const Stack = createStackNavigator<RootStackParamList>();
 
@@ -59,6 +60,7 @@ export function RootNavigator() {
                             onRegisterPress={() => props.navigation.navigate('Register')}
                             onVisitorPress={() => props.navigation.navigate('MainTabs')}
                             onForgotPasswordPress={() => props.navigation.navigate('ForgotPassword')}
+                            onVerifyEmail={() => props.navigation.navigate('VerifyEmail')}
                         />
                     )}
                 </Stack.Screen>
@@ -78,7 +80,7 @@ export function RootNavigator() {
                     {(props) => (
                         <GuestRegistrationScreen
                             onBack={() => props.navigation.goBack()}
-                            onComplete={() => props.navigation.navigate('RegistrationComplete')}
+                            onComplete={() => props.navigation.navigate('VerifyEmail')}
                         />
                     )}
                 </Stack.Screen>
@@ -86,7 +88,7 @@ export function RootNavigator() {
                     {(props) => (
                         <ExpertRegistrationScreen
                             onBack={() => props.navigation.goBack()}
-                            onComplete={() => props.navigation.navigate('RegistrationComplete')}
+                            onComplete={() => props.navigation.navigate('VerifyEmail')}
                         />
                     )}
                 </Stack.Screen>
@@ -94,7 +96,14 @@ export function RootNavigator() {
                     {(props) => (
                         <NGORegistrationScreen
                             onBack={() => props.navigation.goBack()}
-                            onComplete={() => props.navigation.navigate('RegistrationComplete')}
+                            onComplete={() => props.navigation.navigate('VerifyEmail')}
+                        />
+                    )}
+                </Stack.Screen>
+                <Stack.Screen name="VerifyEmail">
+                    {(props) => (
+                        <VerifyEmailScreen
+                            onVerified={() => props.navigation.navigate('Login')}
                         />
                     )}
                 </Stack.Screen>

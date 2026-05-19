@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, Modal } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowLeft, ArrowRight, Eye, EyeOff, Check } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSignupMutation } from '../services/authApi';
 import CustomAlert from '../utils/CustomAlert';
 
@@ -104,13 +105,11 @@ export function ExpertRegistrationScreen({ onBack, onComplete }: {
     try {
       const response = await registerApi(payload).unwrap();
       if (response.status) {
-        showConfirm({
-          title: 'Success',
-          message: response?.message || 'Registration successful! Please verify your email.',
-          confirmText: 'Great!',
-          hideCancel: true,
-          onConfirm: () => onComplete()
-        });
+        // Save credentials for the verification screen
+        await AsyncStorage.setItem('verificationEmail', email);
+        await AsyncStorage.setItem('verificationPassword', password);
+        // Immediately navigate to email verification
+        onComplete();
       } else {
         showConfirm({ title: 'Error', message: response.message || 'Registration failed', confirmText: 'OK', hideCancel: true, onConfirm: () => { } });
       }

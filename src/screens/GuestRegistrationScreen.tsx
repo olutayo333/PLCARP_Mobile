@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, Modal } from 'react-native';
 import { ArrowLeft, ArrowRight, Eye, EyeOff } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSignupMutation } from '../services/authApi';
 import CustomAlert from '../utils/CustomAlert';
 
@@ -29,17 +30,17 @@ export function GuestRegistrationScreen({ onBack, onComplete }: {
 
   const handleContinue = async () => {
     if (!fullName || !email || !password) {
-      showConfirm({ title: 'Error', message: 'Please fill in all fields', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
+      showConfirm({ title: 'Error', message: 'Please fill in all fields', confirmText: 'OK', hideCancel: true, onConfirm: () => { } });
       return;
     }
 
     if (!emailRegex.test(email)) {
-      showConfirm({ title: 'Error', message: 'Enter a valid email address', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
+      showConfirm({ title: 'Error', message: 'Enter a valid email address', confirmText: 'OK', hideCancel: true, onConfirm: () => { } });
       return;
     }
 
     if (!passwordRegex.test(password)) {
-      showConfirm({ title: 'Error', message: 'Password must contain an uppercase letter, a number and a symbol', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
+      showConfirm({ title: 'Error', message: 'Password must contain an uppercase letter, a number and a symbol', confirmText: 'OK', hideCancel: true, onConfirm: () => { } });
       return;
     }
 
@@ -53,19 +54,17 @@ export function GuestRegistrationScreen({ onBack, onComplete }: {
     try {
       const response = await registerApi(payload).unwrap() as any;
       if (response.status) {
-        showConfirm({ 
-          title: 'Success', 
-          message: response.message || 'Registration successful! Please verify your email.', 
-          confirmText: 'Done', 
-          hideCancel: true,
-          onConfirm: () => onComplete() 
-        });
+        // Save credentials for the verification screen
+        await AsyncStorage.setItem('verificationEmail', email);
+        await AsyncStorage.setItem('verificationPassword', password);
+        // Immediately navigate to email verification
+        onComplete();
       } else {
-        showConfirm({ title: 'Error', message: response.message || 'Registration failed', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
+        showConfirm({ title: 'Error', message: response.message || 'Registration failed', confirmText: 'OK', hideCancel: true, onConfirm: () => { } });
       }
     } catch (error: any) {
       const serverError = error?.data?.message || 'Registration failed. Please try again.';
-      showConfirm({ title: 'Error', message: serverError, confirmText: 'Retry', hideCancel: true, onConfirm: () => {} });
+      showConfirm({ title: 'Error', message: serverError, confirmText: 'Retry', hideCancel: true, onConfirm: () => { } });
     }
   };
 

@@ -11,11 +11,12 @@ import { socketService } from '../services/socketService';
 
 const Alert = CustomAlert;
 
-export function LoginScreen({ onLoginSuccess, onRegisterPress, onVisitorPress, onForgotPasswordPress }: {
+export function LoginScreen({ onLoginSuccess, onRegisterPress, onVisitorPress, onForgotPasswordPress, onVerifyEmail }: {
   onLoginSuccess: () => void;
   onRegisterPress: () => void;
   onVisitorPress: () => void;
   onForgotPasswordPress: () => void;
+  onVerifyEmail: () => void;
 }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -53,11 +54,38 @@ export function LoginScreen({ onLoginSuccess, onRegisterPress, onVisitorPress, o
         dispatch(showToast({ message: 'Login successful! Welcome back.', type: 'success' }));
         onLoginSuccess();
       } else {
-        const errorMsg = result?.message || result?.data?.message || 'Invalid login response';
-        showConfirm({ title: 'Login Error', message: errorMsg, confirmText: 'Retry', hideCancel: true, onConfirm: () => { } });
+        const errorMsg = result?.message || result?.data?.message || '';
+
+        // Detect unverified email — redirect to verification screen
+        const isUnverified =
+          (result?.statusCode === 403 || result?.data?.statusCode === 403) &&
+          typeof errorMsg === 'string' &&
+          errorMsg.toLowerCase().includes('verify your email');
+
+        if (isUnverified) {
+          await AsyncStorage.setItem('verificationEmail', email);
+          await AsyncStorage.setItem('verificationPassword', password);
+          onVerifyEmail();
+          return;
+        }
+
+        showConfirm({ title: 'Login Error', message: errorMsg || 'Invalid login response', confirmText: 'Retry', hideCancel: true, onConfirm: () => { } });
       }
     } catch (error: any) {
-      const serverMsg = error.data?.message || error.message || 'Something went wrong';
+      const serverMsg: string = error?.data?.message || error?.message || 'Something went wrong';
+
+      // Detect unverified email thrown as an error (RTK Query unwrap throws on 4xx)
+      const isUnverified =
+        (error?.status === 403 || error?.data?.statusCode === 403) &&
+        serverMsg.toLowerCase().includes('verify your email');
+
+      if (isUnverified) {
+        await AsyncStorage.setItem('verificationEmail', email);
+        await AsyncStorage.setItem('verificationPassword', password);
+        onVerifyEmail();
+        return;
+      }
+
       showConfirm({ title: 'Login Failed', message: serverMsg, confirmText: 'Try Again', hideCancel: true, onConfirm: () => { } });
     }
   };
