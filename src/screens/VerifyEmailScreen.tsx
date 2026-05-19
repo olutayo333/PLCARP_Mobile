@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     StyleSheet,
     View,
@@ -20,7 +20,7 @@ import { showToast } from '../store/slices/uiSlice';
 // ─── Props ───────────────────────────────────────────────────────────────────
 
 interface VerifyEmailScreenProps {
-    onVerified: () => void; // navigates to Login
+    onVerified: () => void;
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -30,7 +30,7 @@ export function VerifyEmailScreen({ onVerified }: VerifyEmailScreenProps) {
 
     // State
     const [email, setEmail] = useState('');
-    const [code, setCode] = useState<string[]>(Array(6).fill(''));
+    const [otp, setOtp] = useState('');
     const [timeLeft, setTimeLeft] = useState(30);
     const [loaded, setLoaded] = useState(false);
 
@@ -50,7 +50,7 @@ export function VerifyEmailScreen({ onVerified }: VerifyEmailScreenProps) {
     const [verifyEmail, { isLoading: isVerifying }] = useVerifyEmailApiMutation();
     const [resendCode, { isLoading: isResending }] = useResendVerificationCodeMutation();
 
-    // ── Load credentials from AsyncStorage on mount ──────────────────────────
+    // ── Load credentials from AsyncStorage ──────────────────────────────────
     useEffect(() => {
         const loadCredentials = async () => {
             try {
@@ -58,10 +58,9 @@ export function VerifyEmailScreen({ onVerified }: VerifyEmailScreenProps) {
                 const storedPassword = await AsyncStorage.getItem('verificationPassword');
 
                 if (!storedEmail || !storedPassword) {
-                    // No credentials – should not be here; go back to Login
                     showConfirm({
-                        title: 'Access Denied',
-                        message: 'Session expired. Please log in again.',
+                        title: 'Session Expired',
+                        message: 'Could not load account details. Please log in again.',
                         confirmText: 'OK',
                         hideCancel: true,
                         onConfirm: () => onVerified(),
@@ -81,59 +80,22 @@ export function VerifyEmailScreen({ onVerified }: VerifyEmailScreenProps) {
     // ── Countdown timer ───────────────────────────────────────────────────────
     useEffect(() => {
         if (timeLeft <= 0) return;
-        const timer = setInterval(() => {
-            setTimeLeft((prev) => prev - 1);
-        }, 1000);
+        const timer = setInterval(() => setTimeLeft((prev) => prev - 1), 1000);
         return () => clearInterval(timer);
     }, [timeLeft]);
 
     const formattedTime =
         `0${Math.floor(timeLeft / 60)}`.slice(-2) + ':' + `0${timeLeft % 60}`.slice(-2);
 
-    // ── OTP input handlers ────────────────────────────────────────────────────
-    const inputs = React.useRef<(TextInput | null)[]>([]);
-
-    const handleCodeChange = (value: string, index: number) => {
-        // Accept only digits
-        const digit = value.replace(/\D/g, '').slice(-1);
-        const newCode = [...code];
-        newCode[index] = digit;
-        setCode(newCode);
-
-        // Auto-advance
-        if (digit && index < 5) {
-            inputs.current[index + 1]?.focus();
-        }
-    };
-
-    const handleKeyPress = (key: string, index: number) => {
-        if (key === 'Backspace') {
-            if (code[index]) {
-                const newCode = [...code];
-                newCode[index] = '';
-                setCode(newCode);
-            } else if (index > 0) {
-                const newCode = [...code];
-                newCode[index - 1] = '';
-                setCode(newCode);
-                inputs.current[index - 1]?.focus();
-            }
-        }
+    // ── OTP change: digits only, max 6 ───────────────────────────────────────
+    const handleOtpChange = (value: string) => {
+        const digitsOnly = value.replace(/\D/g, '').slice(0, 6);
+        setOtp(digitsOnly);
     };
 
     // ── Verify ────────────────────────────────────────────────────────────────
     const handleVerify = async () => {
-        const otp = code.join('');
-        if (otp.length !== 6) {
-            showConfirm({
-                title: 'Incomplete Code',
-                message: 'Please enter the full 6-digit verification code.',
-                confirmText: 'OK',
-                hideCancel: true,
-                onConfirm: () => { },
-            });
-            return;
-        }
+        if (otp.length !== 6) return; // button is disabled, but guard anyway
 
         try {
             const response = await verifyEmail({ email, otp }).unwrap() as any;
@@ -141,7 +103,7 @@ export function VerifyEmailScreen({ onVerified }: VerifyEmailScreenProps) {
             if (response?.statusCode === 200 || response?.status === true) {
                 await AsyncStorage.removeItem('verificationEmail');
                 await AsyncStorage.removeItem('verificationPassword');
-                dispatch(showToast({ message: 'Email verified successfully! Please log in.', type: 'success' }));
+                dispatch(showToast({ message: 'Email verified! Please log in.', type: 'success' }));
                 onVerified();
                 return;
             }
@@ -151,12 +113,11 @@ export function VerifyEmailScreen({ onVerified }: VerifyEmailScreenProps) {
                 message: response?.message || 'Invalid code. Please try again.',
                 confirmText: 'Try Again',
                 hideCancel: true,
-                onConfirm: () => { },
+                onConfirm: () => setOtp(''),
             });
         } catch (error: any) {
             const message: string = error?.data?.message || error?.message || '';
 
-            // Handle already-verified case gracefully
             if (typeof message === 'string' && message.toLowerCase().includes('already verified')) {
                 await AsyncStorage.removeItem('verificationEmail');
                 await AsyncStorage.removeItem('verificationPassword');
@@ -170,7 +131,7 @@ export function VerifyEmailScreen({ onVerified }: VerifyEmailScreenProps) {
                 message: message || 'Something went wrong. Please try again.',
                 confirmText: 'OK',
                 hideCancel: true,
-                onConfirm: () => { },
+                onConfirm: () => setOtp(''),
             });
         }
     };
@@ -184,8 +145,7 @@ export function VerifyEmailScreen({ onVerified }: VerifyEmailScreenProps) {
                 type: 'success',
             }));
             setTimeLeft(60);
-            setCode(Array(6).fill(''));
-            inputs.current[0]?.focus();
+            setOtp('');
         } catch (error: any) {
             const message = error?.data?.message || 'Failed to resend code. Please try again.';
             showConfirm({
@@ -207,12 +167,17 @@ export function VerifyEmailScreen({ onVerified }: VerifyEmailScreenProps) {
         );
     }
 
+    const isReady = otp.length === 6;
+
     return (
         <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             style={styles.container}
         >
-            <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+            <ScrollView
+                contentContainerStyle={styles.scrollContent}
+                keyboardShouldPersistTaps="handled"
+            >
                 {/* Icon */}
                 <View style={styles.iconContainer}>
                     <Mail size={36} color="#0e7490" />
@@ -225,33 +190,33 @@ export function VerifyEmailScreen({ onVerified }: VerifyEmailScreenProps) {
                     <Text style={styles.emailText}>{email}</Text>
                 </Text>
 
-                {/* OTP Boxes */}
-                <View style={styles.otpContainer}>
-                    {Array.from({ length: 6 }).map((_, index) => (
-                        <TextInput
-                            key={index}
-                            ref={(ref) => { inputs.current[index] = ref; }}
-                            style={[
-                                styles.otpBox,
-                                code[index] ? styles.otpBoxFilled : {},
-                            ]}
-                            value={code[index]}
-                            onChangeText={(value) => handleCodeChange(value, index)}
-                            onKeyPress={({ nativeEvent }) => handleKeyPress(nativeEvent.key, index)}
-                            keyboardType="number-pad"
-                            maxLength={1}
-                            textAlign="center"
-                            selectTextOnFocus
-                            caretHidden={Platform.OS !== 'web'}
-                        />
-                    ))}
+                {/* Single OTP Input */}
+                <View style={styles.otpWrapper}>
+                    <TextInput
+                        style={[styles.otpInput, isReady && styles.otpInputReady]}
+                        value={otp}
+                        onChangeText={handleOtpChange}
+                        keyboardType="number-pad"
+                        maxLength={6}
+                        placeholder="Enter 6-digit code"
+                        placeholderTextColor="#9ca3af"
+                        textAlign="center"
+                        autoCorrect={false}
+                        autoComplete="one-time-code"
+                        textContentType="oneTimeCode"
+                        importantForAutofill="yes"
+                    />
+                    {/* Character counter */}
+                    <Text style={[styles.counter, isReady && styles.counterReady]}>
+                        {otp.length} / 6
+                    </Text>
                 </View>
 
                 {/* Verify Button */}
                 <TouchableOpacity
-                    style={[styles.button, isVerifying && styles.buttonDisabled]}
+                    style={[styles.button, (!isReady || isVerifying) && styles.buttonDisabled]}
                     onPress={handleVerify}
-                    disabled={isVerifying}
+                    disabled={!isReady || isVerifying}
                     activeOpacity={0.85}
                 >
                     {isVerifying ? (
@@ -291,7 +256,7 @@ export function VerifyEmailScreen({ onVerified }: VerifyEmailScreenProps) {
                 </TouchableOpacity>
             </ScrollView>
 
-            {/* ── Confirm Modal ────────────────────────────────────── */}
+            {/* ── Confirm Modal ── */}
             <Modal
                 visible={!!confirmModal}
                 transparent
@@ -375,29 +340,41 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         color: '#111827',
     },
-    otpContainer: {
-        flexDirection: 'row',
-        gap: 10,
-        marginBottom: 32,
+    // Single OTP input
+    otpWrapper: {
+        width: '100%',
+        marginBottom: 28,
+        gap: 8,
     },
-    otpBox: {
-        width: 48,
-        height: 56,
-        borderWidth: 1.5,
+    otpInput: {
+        width: '100%',
+        height: 64,
+        borderWidth: 2,
         borderColor: '#d1d5db',
-        borderRadius: 10,
-        fontSize: 22,
+        borderRadius: 12,
+        fontSize: 28,
         fontWeight: 'bold',
         color: '#111827',
         backgroundColor: '#f9fafb',
+        letterSpacing: 10,
         ...Platform.select({
             web: { outlineStyle: 'none' } as any,
         }),
     },
-    otpBoxFilled: {
+    otpInputReady: {
         borderColor: '#0e7490',
         backgroundColor: '#ecfeff',
     },
+    counter: {
+        textAlign: 'right',
+        fontSize: 12,
+        color: '#9ca3af',
+        fontWeight: '600',
+    },
+    counterReady: {
+        color: '#0e7490',
+    },
+    // Button
     button: {
         width: '100%',
         height: 56,
@@ -413,13 +390,16 @@ const styles = StyleSheet.create({
         elevation: 4,
     },
     buttonDisabled: {
-        opacity: 0.7,
+        backgroundColor: '#9ca3af',
+        shadowOpacity: 0,
+        elevation: 0,
     },
     buttonText: {
         color: '#fff',
         fontSize: 16,
         fontWeight: 'bold',
     },
+    // Resend
     resendContainer: {
         alignItems: 'center',
         marginBottom: 20,
