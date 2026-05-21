@@ -55,7 +55,7 @@ export function ExpertRegistrationScreen({ onBack, onComplete }: {
 
   const toggleExpertise = (area: string) => {
     if (selectedExpertise.includes(area)) {
-      setSelectedExpertise(selectedExpertise.filter(i => i !== area));
+      setSelectedExpertise(selectedExpertise.filter((i: string) => i !== area));
     } else {
       setSelectedExpertise([...selectedExpertise, area]);
     }

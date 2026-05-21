@@ -83,7 +83,7 @@ export function NGORegistrationScreen({ onBack, onComplete }: {
 
   const toggleExpertise = (area: string) => {
     if (areasOfExpertise.includes(area)) {
-      setAreasOfExpertise(areasOfExpertise.filter(i => i !== area));
+      setAreasOfExpertise(areasOfExpertise.filter((i: string) => i !== area));
     } else {
       setAreasOfExpertise([...areasOfExpertise, area]);
     }
@@ -178,8 +178,8 @@ export function NGORegistrationScreen({ onBack, onComplete }: {
           </View>
           <FlatList
             data={Object.keys(NIGERIA_STATES_LGAS).sort()}
-            keyExtractor={(item) => item}
-            renderItem={({ item }) => (
+            keyExtractor={(item: string) => item}
+            renderItem={({ item }: { item: string }) => (
               <TouchableOpacity
                 style={styles.pickerItem}
                 onPress={() => {
@@ -210,8 +210,8 @@ export function NGORegistrationScreen({ onBack, onComplete }: {
           </View>
           <FlatList
             data={state ? NIGERIA_STATES_LGAS[state].sort() : []}
-            keyExtractor={(item) => item}
-            renderItem={({ item }) => (
+            keyExtractor={(item: string) => item}
+            renderItem={({ item }: { item: string }) => (
               <TouchableOpacity
                 style={styles.pickerItem}
                 onPress={() => {
@@ -322,7 +322,7 @@ export function NGORegistrationScreen({ onBack, onComplete }: {
                   placeholder="0800 000 0000"
                   placeholderTextColor="#9ca3af"
                   value={personalPhone}
-                  onChangeText={(text) => setPersonalPhone(text.replace(/[^0-9]/g, ''))}
+                  onChangeText={(text: string) => setPersonalPhone(text.replace(/[^0-9]/g, ''))}
                   keyboardType="phone-pad"
                 />
               </View>
@@ -334,7 +334,7 @@ export function NGORegistrationScreen({ onBack, onComplete }: {
                   placeholder="e.g. 10"
                   placeholderTextColor="#9ca3af"
                   value={yearsOfExperience}
-                  onChangeText={(text) => setYearsOfExperience(text.replace(/[^0-9]/g, ''))}
+                  onChangeText={(text: string) => setYearsOfExperience(text.replace(/[^0-9]/g, ''))}
                   keyboardType="numeric"
                 />
               </View>
@@ -407,7 +407,7 @@ export function NGORegistrationScreen({ onBack, onComplete }: {
                   placeholder="0801 234 5678"
                   placeholderTextColor="#9ca3af"
                   value={orgPhone}
-                  onChangeText={(text) => setOrgPhone(text.replace(/[^0-9]/g, ''))}
+                  onChangeText={(text: string) => setOrgPhone(text.replace(/[^0-9]/g, ''))}
                   keyboardType="phone-pad"
                 />
               </View>
@@ -635,7 +635,7 @@ const styles = StyleSheet.create({
     color: '#111827',
     ...Platform.select({
       web: {
-        outlineStyle: 'none',
+        outlineStyle: 'none' as any,
       },
     }),
   },
@@ -659,7 +659,7 @@ const styles = StyleSheet.create({
     color: '#111827',
     ...Platform.select({
       web: {
-        outlineStyle: 'none',
+        outlineStyle: 'none' as any,
       },
     }),
   },

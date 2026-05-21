@@ -31,11 +31,11 @@ export function ForgotPasswordScreen({ onBackToLogin }: { onBackToLogin: () => v
 
     const validateStep1 = () => {
         if (!email) {
-            showConfirm({ title: 'Error', message: 'Email address is required', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
+            showConfirm({ title: 'Error', message: 'Email address is required', confirmText: 'OK', hideCancel: true, onConfirm: () => { } });
             return false;
         }
         if (!emailRegex.test(email)) {
-            showConfirm({ title: 'Error', message: 'Enter a valid email address', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
+            showConfirm({ title: 'Error', message: 'Enter a valid email address', confirmText: 'OK', hideCancel: true, onConfirm: () => { } });
             return false;
         }
         return true;
@@ -43,23 +43,23 @@ export function ForgotPasswordScreen({ onBackToLogin }: { onBackToLogin: () => v
 
     const validateStep2 = () => {
         if (!token) {
-            showConfirm({ title: 'Error', message: 'Verification Code is required', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
+            showConfirm({ title: 'Error', message: 'Verification Code is required', confirmText: 'OK', hideCancel: true, onConfirm: () => { } });
             return false;
         }
         if (!password) {
-            showConfirm({ title: 'Error', message: 'Password is required', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
+            showConfirm({ title: 'Error', message: 'Password is required', confirmText: 'OK', hideCancel: true, onConfirm: () => { } });
             return false;
         }
         if (!passwordRegex.test(password)) {
-            showConfirm({ title: 'Error', message: 'Password must meet minimum requirements (8 chars, uppercase, lowercase, special character)', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
+            showConfirm({ title: 'Error', message: 'Password must meet minimum requirements (8 chars, uppercase, lowercase, special character)', confirmText: 'OK', hideCancel: true, onConfirm: () => { } });
             return false;
         }
         if (!passwordConfirm) {
-            showConfirm({ title: 'Error', message: 'Confirm Password is required', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
+            showConfirm({ title: 'Error', message: 'Confirm Password is required', confirmText: 'OK', hideCancel: true, onConfirm: () => { } });
             return false;
         }
         if (password !== passwordConfirm) {
-            showConfirm({ title: 'Error', message: 'Passwords do not match', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
+            showConfirm({ title: 'Error', message: 'Passwords do not match', confirmText: 'OK', hideCancel: true, onConfirm: () => { } });
             return false;
         }
         return true;
@@ -68,20 +68,20 @@ export function ForgotPasswordScreen({ onBackToLogin }: { onBackToLogin: () => v
     const handleSendToken = async () => {
         if (!validateStep1()) return;
         try {
-          const response = await sendCodeApi({ email }).unwrap() as any;
-          if (response.status) {
-            showConfirm({ 
-              title: 'Success', 
-              message: response?.message || 'Verification code sent to your email.', 
-              confirmText: 'Next', 
-              hideCancel: true,
-              onConfirm: () => setStep(2) 
-            });
-          } else {
-            showConfirm({ title: 'Error', message: response?.message || 'Failed to send reset link.', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
-          }
+            const response = await sendCodeApi({ email }).unwrap() as any;
+            if (response.status) {
+                showConfirm({
+                    title: 'Success',
+                    message: response?.message || 'Verification code sent to your email.',
+                    confirmText: 'Next',
+                    hideCancel: true,
+                    onConfirm: () => setStep(2)
+                });
+            } else {
+                showConfirm({ title: 'Error', message: response?.message || 'Failed to send reset link.', confirmText: 'OK', hideCancel: true, onConfirm: () => { } });
+            }
         } catch (error: any) {
-            showConfirm({ title: 'Error', message: error?.data?.message || 'Failed to send reset link.', confirmText: 'Retry', hideCancel: true, onConfirm: () => {} });
+            showConfirm({ title: 'Error', message: error?.data?.message || 'Failed to send reset link.', confirmText: 'Retry', hideCancel: true, onConfirm: () => { } });
         }
     };
 
@@ -94,18 +94,18 @@ export function ForgotPasswordScreen({ onBackToLogin }: { onBackToLogin: () => v
                 password,
             }).unwrap() as any;
             if (response.status) {
-                showConfirm({ 
-                  title: 'Success', 
-                  message: response?.message || 'Password has been reset successfully.', 
-                  confirmText: 'Login Now', 
-                  hideCancel: true,
-                  onConfirm: () => onBackToLogin() 
+                showConfirm({
+                    title: 'Success',
+                    message: response?.message || 'Password has been reset successfully.',
+                    confirmText: 'Login Now',
+                    hideCancel: true,
+                    onConfirm: () => onBackToLogin()
                 });
             } else {
-                showConfirm({ title: 'Error', message: response?.message || 'Failed to reset password.', confirmText: 'OK', hideCancel: true, onConfirm: () => {} });
+                showConfirm({ title: 'Error', message: response?.message || 'Failed to reset password.', confirmText: 'OK', hideCancel: true, onConfirm: () => { } });
             }
         } catch (error: any) {
-            showConfirm({ title: 'Error', message: error?.data?.message || 'Failed to reset password.', confirmText: 'Retry', hideCancel: true, onConfirm: () => {} });
+            showConfirm({ title: 'Error', message: error?.data?.message || 'Failed to reset password.', confirmText: 'Retry', hideCancel: true, onConfirm: () => { } });
         }
     };
 
@@ -311,7 +311,7 @@ const styles = StyleSheet.create({
         color: '#111827',
         ...Platform.select({
             web: {
-                outlineStyle: 'none',
+                outlineStyle: 'none' as any,
             },
         }),
     },

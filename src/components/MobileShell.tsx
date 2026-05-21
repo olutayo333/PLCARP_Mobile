@@ -1,13 +1,13 @@
 import React from 'react';
-import {Home, Search, PlusSquare, Heart, User} from 'lucide-react';
-import {cn} from '../utils/cn';
+import { Home, Search, PlusSquare, Heart, User } from 'lucide-react';
+import { cn } from '../utils/cn';
 
 interface MobileShellProps {
   children: React.ReactNode;
   activeTab?: string;
 }
 
-export function MobileShell({children, activeTab = 'home'}: MobileShellProps) {
+export function MobileShell({ children, activeTab = 'home' }: MobileShellProps) {
   return (
     <div className="flex flex-col h-screen max-w-md mx-auto bg-white shadow-2xl overflow-hidden border-x border-gray-100">
       {/* Header */}
@@ -36,13 +36,13 @@ export function MobileShell({children, activeTab = 'home'}: MobileShellProps) {
   );
 }
 
-function NavItem({icon, label, active}: {icon: React.ReactNode; label: string; active?: boolean}) {
+function NavItem({ icon, label, active }: { icon: React.ReactNode; label: string; active?: boolean }) {
   return (
     <button className={cn(
       "flex flex-col items-center gap-1 transition-colors",
       active ? "text-indigo-600" : "text-gray-400 hover:text-gray-600"
     )}>
-      {React.cloneElement(icon as React.ReactElement, {
+      {React.cloneElement(icon as React.ReactElement<any>, {
         className: cn("w-6 h-6", active && "fill-current")
       })}
       <span className="text-[10px] font-medium uppercase tracking-wider">{label}</span>

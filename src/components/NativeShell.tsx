@@ -62,7 +62,7 @@ export function NativeShell({ children, activeTab = 'home', onTabChange }: Nativ
 function NavItem({ icon, label, active, onPress }: { icon: React.ReactNode; label: string; active?: boolean; onPress?: () => void }) {
   return (
     <TouchableOpacity style={styles.navItem} onPress={onPress}>
-      {React.cloneElement(icon as React.ReactElement, {
+      {React.cloneElement(icon as React.ReactElement<any>, {
         size: 24,
         color: active ? '#0e7490' : '#9ca3af',
         fill: active ? '#0e7490' : 'transparent'

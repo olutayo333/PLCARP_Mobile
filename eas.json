@@ -21,6 +21,9 @@
       "ios": {
         "simulator": false,
         "image": "latest"
+      },
+      "env": {
+        "NPM_FLAGS": "--legacy-peer-deps"
       }
     },
     "production-apk": {
