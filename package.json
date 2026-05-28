@@ -7,7 +7,7 @@
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
-    "eas-build-pre-install": "pod repo update",
+    "eas-build-pre-install": "if [ \"$EAS_BUILD_PLATFORM\" = \"ios\" ]; then pod repo update; fi",
     "web": "expo start --web",
     "dev": "vite --port=3000 --host=0.0.0.0",
     "build": "vite build",
