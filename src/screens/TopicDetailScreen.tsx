@@ -38,6 +38,10 @@ import {
     useDeleteCommentMutation,
     useUpdateCommentMutation,
     useSearchCommunityMembersQuery,
+    useGetMySubscriptionsQuery,
+    useGetCommunityByIdQuery,
+    useSubscribeToCommunityMutation,
+    useUnsubscribeFromCommunityMutation,
 } from '../services/communityApi';
 import { useDispatch, useSelector } from 'react-redux';
 import { showToast } from '../store/slices/uiSlice';
@@ -63,6 +67,41 @@ export function TopicDetailScreen({ communityId, topicId, quoteCommentId, replyC
     const blockedUserIds = useSelector((state: RootState) => state.safety.blockedUserIds);
     const { data: topic, isLoading } = useGetTopicByIdQuery({ communityId, topicId });
     const { data: mentions } = useGetMentionsQuery(undefined, { skip: !isLoggedIn });
+
+    const { data: community } = useGetCommunityByIdQuery(communityId);
+    const { data: subscriptions } = useGetMySubscriptionsQuery(undefined, { skip: !isLoggedIn });
+    
+    const [subscribeToCommunity, { isLoading: isSubscribing }] = useSubscribeToCommunityMutation();
+    const [unsubscribeFromCommunity, { isLoading: isUnsubscribing }] = useUnsubscribeFromCommunityMutation();
+
+    const isSubscribedLocally = subscriptions?.some((sub: any) => sub?.id === communityId);
+    const isJoined = community?.joined || community?.isJoined || community?.isSubscribed || isSubscribedLocally;
+
+    const handleToggleSubscribe = async () => {
+        if (!isLoggedIn) {
+            Alert.alert(
+                "Authentication Required",
+                "Please log in to join this community.",
+                [
+                    { text: "Cancel", style: "cancel" },
+                    { text: "OK", onPress: () => navigation.navigate('Login') }
+                ]
+            );
+            return;
+        }
+
+        try {
+            if (isJoined) {
+                await unsubscribeFromCommunity(communityId).unwrap();
+                dispatch(showToast({ message: 'Unsubscribed successfully', type: 'success' }));
+            } else {
+                await subscribeToCommunity(communityId).unwrap();
+                dispatch(showToast({ message: 'Subscribed successfully!', type: 'success' }));
+            }
+        } catch (err: any) {
+            dispatch(showToast({ message: err?.data?.message || 'Failed to update subscription', type: 'error' }));
+        }
+    };
 
     const [addComment, { isLoading: isPosting }] = useAddCommentMutation();
     const [toggleLike] = useToggleTopicLikeMutation();
@@ -920,10 +959,24 @@ export function TopicDetailScreen({ communityId, topicId, quoteCommentId, replyC
                                     </View>
                                 </View>
 
-                                <View style={styles.subscribedPill}>
-                                    <Text style={styles.checkIcon}>✓</Text>
-                                    <Text style={styles.subscribedText}>Subscribed</Text>
-                                </View>
+                                {community && (
+                                    <TouchableOpacity 
+                                        style={styles.subscribedPill}
+                                        onPress={handleToggleSubscribe}
+                                        disabled={isSubscribing || isUnsubscribing}
+                                    >
+                                        {(isSubscribing || isUnsubscribing) ? (
+                                            <ActivityIndicator size="small" color="#fff" />
+                                        ) : (
+                                            <>
+                                                {isJoined && <Text style={styles.checkIcon}>✓</Text>}
+                                                <Text style={styles.subscribedText}>
+                                                    {isJoined ? 'Subscribed' : 'Subscribe'}
+                                                </Text>
+                                            </>
+                                        )}
+                                    </TouchableOpacity>
+                                )}
                             </View>
                         </View>
 

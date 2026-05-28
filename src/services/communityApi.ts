@@ -34,6 +34,8 @@ export interface CommunitySearchResult {
   joined?: boolean;
   createdAt: string;
   updatedAt: string;
+  isJoined?: boolean;
+  isSubscribed?: boolean;
 }
 
 export interface CommunityFilters {
@@ -297,7 +299,24 @@ export const communityApiSlice = apiSlice.injectEndpoints({
         url: `/communities/${communityId}/subscribe`,
         method: REQUEST_METHODS.POST,
       }),
-      invalidatesTags: ['Communities'],
+      invalidatesTags: (result, error, communityId) => [
+        { type: 'Communities', id: communityId },
+        'Communities'
+      ],
+      async onQueryStarted(communityId, { dispatch, queryFulfilled }) {
+        const patchResult = dispatch(
+          communityApiSlice.util.updateQueryData('getCommunityById', communityId, (draft) => {
+            draft.joined = true;
+            draft.isJoined = true;
+            draft.isSubscribed = true;
+          })
+        );
+        try {
+          await queryFulfilled;
+        } catch {
+          patchResult.undo();
+        }
+      },
     }),
 
     unsubscribeFromCommunity: builder.mutation<any, string>({
@@ -305,7 +324,24 @@ export const communityApiSlice = apiSlice.injectEndpoints({
         url: `/communities/${communityId}/unsubscribe`,
         method: REQUEST_METHODS.DELETE,
       }),
-      invalidatesTags: ['Communities'],
+      invalidatesTags: (result, error, communityId) => [
+        { type: 'Communities', id: communityId },
+        'Communities'
+      ],
+      async onQueryStarted(communityId, { dispatch, queryFulfilled }) {
+        const patchResult = dispatch(
+          communityApiSlice.util.updateQueryData('getCommunityById', communityId, (draft) => {
+            draft.joined = false;
+            draft.isJoined = false;
+            draft.isSubscribed = false;
+          })
+        );
+        try {
+          await queryFulfilled;
+        } catch {
+          patchResult.undo();
+        }
+      },
     }),
 
     getCommunityAnalytics: builder.query<PerCommunityAnalytics, string>({

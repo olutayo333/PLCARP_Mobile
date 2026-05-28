@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, FlatList, ActivityIndicator, TextInput, Platform, ImageBackground, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowLeft, Search, Plus, Check, Clock, TrendingUp, Sparkles, Bell } from 'lucide-react-native';
-import { useGetCommunityByIdQuery, useGetCommunityTopicsQuery, useSubscribeToCommunityMutation, useUnsubscribeFromCommunityMutation } from '../services/communityApi';
+import { useGetCommunityByIdQuery, useGetCommunityTopicsQuery, useSubscribeToCommunityMutation, useUnsubscribeFromCommunityMutation, useGetMySubscriptionsQuery } from '../services/communityApi';
 import { TopicCard } from '../components/TopicCard';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../store';
@@ -50,6 +50,8 @@ export function CommunityDetailScreen({
     const [activeTab, setActiveTab] = useState('RECENT'); // RECENT, TRENDING, NEW, SUBSCRIBED
 
     const { data: community, isLoading: isLoadingCommunity } = useGetCommunityByIdQuery(communityId);
+    const { data: subscriptions } = useGetMySubscriptionsQuery(undefined, { skip: !isLoggedIn });
+    
     const { data: topicsData, isLoading: isLoadingTopics, refetch: refetchTopics } = useGetCommunityTopicsQuery({
         communityId,
         filters: {
@@ -63,6 +65,9 @@ export function CommunityDetailScreen({
     const [subscribe] = useSubscribeToCommunityMutation();
     const [unsubscribe] = useUnsubscribeFromCommunityMutation();
 
+    const isSubscribedLocally = subscriptions?.some((sub: any) => sub?.id === communityId);
+    const isJoined = community?.joined || community?.isJoined || community?.isSubscribed || isSubscribedLocally;
+
     const handleBack = () => navigation.goBack();
 
     const handleSubscribe = async () => {
@@ -73,7 +78,7 @@ export function CommunityDetailScreen({
         }
 
         try {
-            if (community?.joined) {
+            if (isJoined) {
                 // For simplicity in this detail view, we just toggle. 
                 // In a real app, maybe a confirming Alert is better.
                 await unsubscribe(communityId).unwrap();
