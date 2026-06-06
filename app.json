@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "PLRCAP",
+    "name": "PLRCAP-NGO Hub",
     "slug": "plcap",
     "version": "1.2.0",
     "jsEngine": "hermes",
@@ -37,7 +37,7 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.sevenstar.plcap",
-      "versionCode": 10,
+      "versionCode": 11,
       "largeHeap": true,
       "compileSdkVersion": 36,
       "targetSdkVersion": 36,
