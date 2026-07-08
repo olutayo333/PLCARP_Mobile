@@ -2,7 +2,7 @@
   "expo": {
     "name": "PLRCAP-NGO Hub",
     "slug": "plcap",
-    "version": "1.2.0",
+    "version": "1.2.1", 
     "jsEngine": "hermes",
     "orientation": "portrait",
     "icon": "./assets/logo1.png",
@@ -26,7 +26,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.sevenstar.plcap",
-      "buildNumber": "7",
+      "buildNumber": "8",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -37,7 +37,7 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.sevenstar.plcap",
-      "versionCode": 11,
+      "versionCode": 12, 
       "largeHeap": true,
       "compileSdkVersion": 36,
       "targetSdkVersion": 36,
