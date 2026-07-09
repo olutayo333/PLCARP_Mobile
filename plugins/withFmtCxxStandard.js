@@ -8,7 +8,7 @@ const withFmtCxxStandard = (config) => {
     'ios',
     async (config) => {
       const filePath = path.join(config.modRequest.platformProjectRoot, 'Podfile');
-      const contents = fs.readFileSync(filePath, 'utf-8');
+      let contents = fs.readFileSync(filePath, 'utf-8');
 
       const targetOverride = `
     # Force fmt to compile with C++17 and disable consteval to bypass Xcode 16+ error
