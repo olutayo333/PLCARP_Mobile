@@ -21,7 +21,8 @@
         {
           "photosPermission": "The app accesses your photos to let you update your profile picture."
         }
-      ]
+      ],
+      "./plugins/withFmtCxxStandard"
     ],
     "ios": {
       "supportsTablet": true,
