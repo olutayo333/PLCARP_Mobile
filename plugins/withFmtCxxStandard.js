@@ -29,26 +29,21 @@ const withFmtCxxStandard = (config) => {
       end
     end`;
 
-      const result = mergeContents({
-        tag: 'fmt-consteval-fix',
-        src: contents,
-        newSrc: targetOverride,
-        anchor: /post_install do \|installer\|/i,
-        offset: 1,
-        comment: '#',
-      });
-
-      if (result.didMerge || result.didClear) {
-        fs.writeFileSync(filePath, result.contents, 'utf-8');
-      } else {
-        // Fallback injection if the anchor doesn't perfectly match
-        const fallback = contents.replace(
-          /post_install do \\|installer\\|/,
-          `post_install do |installer|${targetOverride}`
-        );
-        fs.writeFileSync(filePath, fallback, 'utf-8');
+      if (contents.includes("target.name == 'fmt'")) {
+        // Already injected
+        return config;
       }
 
+      if (contents.match(/post_install\s+do\s+\|.*?\|/)) {
+        contents = contents.replace(
+          /(post_install\s+do\s+\|.*?\|)/,
+          `$1\n${targetOverride}`
+        );
+      } else {
+        contents += `\npost_install do |installer|\n${targetOverride}\nend\n`;
+      }
+
+      fs.writeFileSync(filePath, contents, 'utf-8');
       return config;
     },
   ]);
